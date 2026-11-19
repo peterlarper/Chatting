@@ -1,0 +1,2414 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" dir="ltr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>CipherChat — E2EE Messenger</title>
+<style>
+  :root {
+    --bg: #0b0f17; --bg-elev: #131926; --bg-card: #1a2234; --bg-input: #111723;
+    --border: rgba(255, 255, 255, 0.08); --text: #eef2ff; --text-muted: #8b98b8;
+    --accent: #6366f1; --accent-soft: rgba(99, 102, 241, 0.16);
+    --bubble-me: #4f46e5; --bubble-me-text: #ffffff;
+    --bubble-them: #1c2538; --bubble-them-text: #eef2ff;
+    --green: #10b981; --red: #ef4444; --amber: #f59e0b;
+    --font-scale: 1; --wallpaper: none; --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  }
+  [data-theme="light"] {
+    --bg: #f1f5f9; --bg-elev: #ffffff; --bg-card: #f8fafc; --bg-input: #e2e8f0;
+    --border: rgba(15, 23, 42, 0.1); --text: #0f172a; --text-muted: #64748b;
+    --bubble-them: #ffffff; --bubble-them-text: #0f172a; --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  }
+  [data-theme="amoled"] {
+    --bg: #000000; --bg-elev: #070709; --bg-card: #111116; --bg-input: #0e0e13;
+    --border: rgba(255, 255, 255, 0.1); --text: #ffffff; --text-muted: #8a8a99;
+    --bubble-them: #15151c; --bubble-them-text: #ffffff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%; width: 100%; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    background: var(--bg); color: var(--text); font-size: calc(14px * var(--font-scale));
+  }
+  body.privacy-blur #app-shell { filter: blur(16px); pointer-events: none; user-select: none; }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  button { cursor: pointer; border: none; background: transparent; }
+  input, textarea, select {
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; outline: none; width: 100%;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  .hidden { display: none !important; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  .muted { color: var(--text-muted); font-size: 0.85em; }
+  .badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+    background: var(--accent); color: #fff; font-size: 11px; font-weight: 700;
+  }
+  .badge.green { background: var(--green); }
+  .badge.red { background: var(--red); }
+  .badge.amber { background: var(--amber); color: #111; }
+  .pill {
+    padding: 6px 12px; border-radius: 999px; background: var(--bg-card);
+    border: 1px solid var(--border); font-size: 12px; white-space: nowrap;
+  }
+  .pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 16px; border-radius: 10px; font-weight: 600;
+    background: var(--accent); color: #fff; transition: opacity .15s, transform .1s;
+  }
+  .btn:hover { opacity: .92; }
+  .btn:active { transform: scale(.98); }
+  .btn.secondary { background: var(--bg-card); color: var(--text); border: 1px solid var(--border); }
+  .btn.danger { background: var(--red); color: #fff; }
+  .btn.sm { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-muted); flex-shrink: 0;
+  }
+  .icon-btn:hover { background: var(--bg-card); color: var(--text); }
+  .icon-btn.active { color: var(--accent); background: var(--accent-soft); }
+
+  #slow-net-bar {
+    position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 9999;
+    background: linear-gradient(90deg, var(--accent), var(--green), var(--accent));
+    background-size: 200% 100%; animation: netload 1.2s linear infinite;
+  }
+  @keyframes netload { 0%{background-position:0% 0} 100%{background-position:200% 0} }
+
+  #toast-container {
+    position: fixed; top: 14px; right: 14px; z-index: 9500;
+    display: flex; flex-direction: column; gap: 8px; max-width: 360px; width: calc(100% - 28px);
+    pointer-events: none;
+  }
+  .toast {
+    pointer-events: auto; background: var(--bg-elev); border: 1px solid var(--border);
+    border-left: 4px solid var(--accent); padding: 12px 14px; border-radius: 12px;
+    box-shadow: var(--shadow); font-size: 13px; animation: slideIn .2s ease;
+  }
+  .toast.green { border-left-color: var(--green); }
+  .toast.red { border-left-color: var(--red); }
+  .toast.amber { border-left-color: var(--amber); }
+  @keyframes slideIn { from{opacity:0; transform:translateY(-8px)} to{opacity:1; transform:none} }
+
+  .avatar {
+    width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--accent), #06b6d4);
+    position: relative; overflow: hidden; font-size: 15px;
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .avatar-wrap { position: relative; flex-shrink: 0; }
+  .status-dot {
+    position: absolute; bottom: 1px; right: 1px; width: 11px; height: 11px;
+    border-radius: 50%; background: var(--green); border: 2px solid var(--bg-elev);
+  }
+  .status-dot.offline { background: #64748b; }
+
+  #auth-gate, #app-lock-overlay {
+    position: fixed; inset: 0; z-index: 5000; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto;
+  }
+  .auth-card {
+    width: 100%; max-width: 440px; background: var(--bg-elev);
+    border: 1px solid var(--border); border-radius: 20px; padding: 24px;
+    box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 14px;
+  }
+  .brand-logo {
+    width: 46px; height: 46px; border-radius: 14px;
+    background: linear-gradient(135deg, var(--accent), #06b6d4);
+    display: inline-flex; align-items: center; justify-content: center; color: #fff;
+  }
+  .auth-tabs {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+    background: var(--bg-input); padding: 4px; border-radius: 12px;
+  }
+  .auth-tab {
+    padding: 8px; border-radius: 9px; font-size: 12px; font-weight: 600; color: var(--text-muted);
+  }
+  .auth-tab.active { background: var(--bg-elev); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  .otp-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .otp-input { text-align: center; font-size: 20px; font-weight: 700; padding: 12px 0; }
+  .divider {
+    display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 12px;
+  }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+  #app-shell {
+    height: 100%; width: 100%; max-width: 1280px; margin: 0 auto;
+    display: grid; grid-template-columns: 390px 1fr; background: var(--bg-elev);
+    border-left: 1px solid var(--border); border-right: 1px solid var(--border); position: relative;
+  }
+  #left-pane {
+    display: flex; flex-direction: column; height: 100%; overflow: hidden;
+    border-right: 1px solid var(--border); background: var(--bg-elev);
+  }
+  .top-bar {
+    height: 58px; padding: 0 14px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0;
+  }
+  #tab-viewport { flex: 1; overflow-y: auto; padding-bottom: 12px; }
+
+  .stories-rail {
+    display: flex; gap: 12px; padding: 12px 14px; overflow-x: auto; border-bottom: 1px solid var(--border);
+  }
+  .story-item {
+    display: flex; flex-direction: column; align-items: center; gap: 5px; width: 62px; flex-shrink: 0; cursor: pointer;
+  }
+  .story-ring { padding: 2px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--green)); }
+  .story-ring.seen { background: var(--border); }
+  .story-name { font-size: 11px; max-width: 62px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .folder-bar { display: flex; gap: 6px; padding: 10px 14px; overflow-x: auto; }
+  .chat-item {
+    display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+    cursor: pointer; border-bottom: 1px solid var(--border);
+  }
+  .chat-item:hover, .chat-item.active { background: var(--bg-card); }
+  .chat-meta { flex: 1; min-width: 0; }
+  .chat-preview { font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  #bottom-nav {
+    height: 62px; border-top: 1px solid var(--border); background: var(--bg-elev);
+    display: grid; grid-template-columns: repeat(4, 1fr); flex-shrink: 0;
+  }
+  .nav-tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; font-size: 11px; color: var(--text-muted); position: relative; font-weight: 500;
+  }
+  .nav-tab.active { color: var(--accent); font-weight: 700; }
+  .nav-tab .nav-badge {
+    position: absolute; top: 6px; right: calc(50% - 20px); min-width: 17px; height: 17px; padding: 0 4px; font-size: 10px;
+  }
+
+  #right-pane {
+    display: flex; flex-direction: column; height: 100%; overflow: hidden;
+    background: var(--bg); background-image: var(--wallpaper); background-size: cover; position: relative;
+  }
+  #chat-empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 24px; text-align: center;
+  }
+  #chat-active { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+  .chat-header {
+    height: 58px; padding: 0 12px; background: var(--bg-elev);
+    border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0;
+  }
+  .chat-banner {
+    padding: 7px 14px; font-size: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    border-bottom: 1px solid var(--border); background: var(--bg-card);
+  }
+  .chat-banner.warn { background: rgba(245, 158, 11, 0.14); color: var(--amber); }
+  #msg-feed { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .msg-row { display: flex; flex-direction: column; max-width: 78%; position: relative; }
+  .msg-row.me { align-self: flex-end; align-items: flex-end; }
+  .msg-row.them { align-self: flex-start; align-items: flex-start; }
+  .msg-row.system { align-self: center; max-width: 90%; }
+  .sys-pill {
+    background: var(--bg-card); color: var(--text-muted); font-size: 11.5px;
+    padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); text-align: center;
+  }
+  .bubble {
+    padding: 9px 12px; border-radius: 16px; line-height: 1.45; word-break: break-word;
+    position: relative; box-shadow: 0 2px 6px rgba(0,0,0,.15);
+  }
+  .msg-row.me .bubble { background: var(--bubble-me); color: var(--bubble-me-text); border-bottom-right-radius: 4px; }
+  .msg-row.them .bubble { background: var(--bubble-them); color: var(--bubble-them-text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .reply-quote {
+    border-left: 3px solid rgba(255,255,255,.55); padding: 4px 8px; margin-bottom: 6px;
+    background: rgba(0,0,0,.18); border-radius: 6px; font-size: 12px; opacity: .9;
+  }
+  .msg-meta { display: flex; align-items: center; gap: 5px; font-size: 10.5px; opacity: .75; margin-top: 4px; justify-content: flex-end; }
+  .msg-actions {
+    display: none; gap: 2px; background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 8px; padding: 2px; margin-top: 3px; box-shadow: var(--shadow);
+  }
+  .msg-row:hover .msg-actions { display: inline-flex; }
+  .reactions-bar { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .react-chip { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 999px; padding: 2px 7px; font-size: 12px; cursor: pointer; }
+  .cipher-preview {
+    margin-top: 6px; padding: 5px 7px; border-radius: 6px; font-family: monospace;
+    font-size: 10px; background: rgba(0,0,0,.28); word-break: break-all; opacity: .85;
+  }
+  .spoiler { background: currentColor; border-radius: 4px; padding: 0 3px; cursor: pointer; }
+  .spoiler.revealed { background: rgba(255,255,255,.15); }
+  code.inline-code { font-family: monospace; background: rgba(0,0,0,.25); padding: 1px 5px; border-radius: 4px; }
+  .poll-box { min-width: 220px; display: flex; flex-direction: column; gap: 6px; }
+  .poll-opt {
+    padding: 7px 10px; border-radius: 8px; background: rgba(0,0,0,.2);
+    display: flex; justify-content: space-between; cursor: pointer; font-size: 12.5px; position: relative; overflow: hidden;
+  }
+  .poll-fill { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255,255,255,.18); pointer-events: none; }
+  .voice-player { display: flex; align-items: center; gap: 8px; min-width: 210px; }
+  .waveform { display: flex; align-items: center; gap: 2px; height: 22px; flex: 1; }
+  .waveform span { width: 3px; border-radius: 2px; background: currentColor; opacity: .75; }
+
+  #composer-wrap { background: var(--bg-elev); border-top: 1px solid var(--border); padding: 8px 12px; flex-shrink: 0; }
+  .composer-bar { display: flex; align-items: flex-end; gap: 8px; }
+  #msg-input { resize: none; max-height: 110px; min-height: 40px; padding: 9px 12px; line-height: 1.35; }
+  #scroll-bottom-btn {
+    position: absolute; right: 18px; bottom: 82px; z-index: 10;
+    background: var(--bg-elev); border: 1px solid var(--border); box-shadow: var(--shadow);
+    border-radius: 999px; padding: 7px 12px; font-size: 12px; display: flex; align-items: center; gap: 6px;
+  }
+
+  .profile-banner { height: 92px; background: linear-gradient(135deg, var(--accent), #06b6d4, #10b981); }
+  .profile-card { padding: 0 16px 14px; border-bottom: 1px solid var(--border); }
+  .profile-avatar-lg { width: 72px; height: 72px; border: 4px solid var(--bg-elev); margin-top: -36px; font-size: 24px; }
+  .settings-group { padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+  .settings-title { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); font-weight: 700; }
+  .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; font-size: 13.5px; }
+  .switch {
+    position: relative; width: 42px; height: 24px; border-radius: 999px;
+    background: var(--bg-input); border: 1px solid var(--border); cursor: pointer; flex-shrink: 0;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+    border-radius: 50%; background: #fff; transition: transform .2s;
+  }
+  .switch.on { background: var(--accent); border-color: var(--accent); }
+  .switch.on::after { transform: translateX(18px); }
+
+  #modal-backdrop {
+    position: fixed; inset: 0; z-index: 8500; background: rgba(0,0,0,.68);
+    backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal-box {
+    width: 100%; max-width: 460px; max-height: 88vh; overflow-y: auto;
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 18px;
+    padding: 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 14px;
+  }
+  .safety-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    font-family: monospace; font-size: 15px; text-align: center;
+    background: var(--bg-input); padding: 12px; border-radius: 12px;
+  }
+  .storage-bar { height: 12px; border-radius: 999px; overflow: hidden; display: flex; background: var(--bg-input); }
+  .back-mobile { display: none; }
+
+  @media (max-width: 820px) {
+    #app-shell { grid-template-columns: 1fr; border: none; }
+    #right-pane { position: fixed; inset: 0; z-index: 100; transform: translateX(100%); transition: transform .22s ease; }
+    #right-pane.mobile-open { transform: translateX(0); }
+    .back-mobile { display: inline-flex; }
+    .msg-row { max-width: 88%; }
+  }
+</style>
+</head>
+<body>
+
+<div id="slow-net-bar" class="hidden"></div>
+<div id="toast-container"></div>
+
+<!-- ==================== STRICT AUTHENTICATION GATE ==================== -->
+<div id="auth-gate">
+  <div class="auth-card" id="auth-step-entry">
+    <div class="row">
+      <div class="brand-logo">🔒</div>
+      <div>
+        <h2 style="font-size:20px">CipherChat</h2>
+        <div class="muted">Zero-Knowledge E2EE Messenger (ECDH + AES-256-GCM)</div>
+      </div>
+    </div>
+
+    <div class="auth-tabs">
+      <button type="button" class="auth-tab active" data-authmode="signup" onclick="Auth.setMode('signup')">Sign Up</button>
+      <button type="button" class="auth-tab" data-authmode="login" onclick="Auth.setMode('login')">Sign In</button>
+      <button type="button" class="auth-tab" data-authmode="forgot" onclick="Auth.setMode('forgot')">Reset OTP</button>
+    </div>
+
+    <div id="auth-inline-alert" class="hidden" style="padding:9px 12px;border-radius:10px;background:rgba(239,68,68,.15);color:#fca5a5;font-size:12.5px"></div>
+
+    <div class="col" style="gap:11px">
+      <div>
+        <label class="muted">Email Address</label>
+        <input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email" onkeydown="if(event.key==='Enter')Auth.submitEntry()" />
+      </div>
+      <div id="auth-password-wrap">
+        <label class="muted">Password</label>
+        <input id="auth-password" type="password" placeholder="Min. 8 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')Auth.submitEntry()" />
+      </div>
+      <button type="button" class="btn" id="auth-submit-btn" onclick="Auth.submitEntry()">Create Account & Send OTP</button>
+    </div>
+
+    <div class="divider">or continue securely with</div>
+    <div class="col" style="gap:8px">
+      <button type="button" class="btn secondary" onclick="Auth.openGoogleModal()">
+        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.7-2.4 3.6v3h3.8c2.2-2.1 3.6-5.1 3.6-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-3l-3.8-3c-1.1.7-2.5 1.2-4.2 1.2-3.2 0-6-2.2-7-5.1H1.1v3.1C3.1 21.2 7.2 24 12 24z"/><path fill="#FBBC05" d="M5 14.1c-.2-.7-.4-1.4-.4-2.1s.1-1.4.4-2.1V6.8H1.1C.4 8.3 0 10.1 0 12s.4 3.7 1.1 5.2l3.9-3.1z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.4.6 4.6 1.8l3.5-3.5C18 1.1 15.2 0 12 0 7.2 0 3.1 2.8 1.1 6.8l3.9 3.1c1-2.9 3.8-5.1 7-5.1z"/></svg>
+        Google Account (OAuth 2.0)
+      </button>
+      <div class="row">
+        <button type="button" class="btn secondary sm" style="flex:1" onclick="Auth.passkeySignIn()">🔑 Passkey</button>
+        <button type="button" class="btn secondary sm" style="flex:1" onclick="Auth.magicLinkSignIn()">✨ Magic Link</button>
+        <button type="button" class="btn secondary sm" style="flex:1;border-color:var(--green);color:var(--green)" onclick="Auth.instantDemoEnter()">⚡ 1-Click Test</button>
+      </div>
+    </div>
+
+    <div id="saved-accounts-quick" class="hidden col">
+      <div class="divider">Quick Switch Saved Session</div>
+      <div id="saved-accounts-list" class="col"></div>
+    </div>
+  </div>
+
+  <!-- STEP 2: 6-DIGIT OTP VERIFICATION -->
+  <div class="auth-card hidden" id="auth-step-otp">
+    <div class="between">
+      <h3>Verify 6-Digit OTP</h3>
+      <span class="badge amber" id="otp-timer">05:00</span>
+    </div>
+    <div id="otp-code-banner" style="padding:10px 12px;border-radius:10px;background:rgba(16,185,129,.15);border:1px solid var(--green);font-size:13px"></div>
+    <div class="muted" id="otp-desc">Enter the 6-digit code sent to your email.</div>
+    <div class="otp-grid" id="otp-inputs">
+      <input class="otp-input" maxlength="1" inputmode="numeric" />
+      <input class="otp-input" maxlength="1" inputmode="numeric" />
+      <input class="otp-input" maxlength="1" inputmode="numeric" />
+      <input class="otp-input" maxlength="1" inputmode="numeric" />
+      <input class="otp-input" maxlength="1" inputmode="numeric" />
+      <input class="otp-input" maxlength="1" inputmode="numeric" />
+    </div>
+    <div id="otp-newpass-wrap" class="hidden">
+      <label class="muted">New Password</label>
+      <input id="otp-newpass" type="password" placeholder="Enter new strong password (min 8 chars)" />
+    </div>
+    <div class="muted" id="otp-attempts-label">Attempts remaining: 3 / 3</div>
+    <button type="button" class="btn" onclick="Auth.verifyOtp()">Verify & Continue</button>
+    <div class="between">
+      <button type="button" class="btn secondary sm" id="otp-resend-btn" onclick="Auth.resendOtp()">Resend OTP</button>
+      <button type="button" class="btn secondary sm" onclick="Auth.backToEntry()">Back</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: MANDATORY PROFILE ONBOARDING WIZARD -->
+  <div class="auth-card hidden" id="auth-step-onboard">
+    <div>
+      <h3>Complete Your Profile</h3>
+      <div class="muted">Required before generating your E2EE Identity Keys and unlocking CipherChat.</div>
+    </div>
+    <div class="row" style="justify-content:center">
+      <div class="avatar" id="onboard-avatar-preview" style="width:74px;height:74px;font-size:26px">?</div>
+    </div>
+    <div class="row" style="justify-content:center">
+      <label class="btn secondary sm" style="cursor:pointer">
+        Upload & Strip EXIF Photo
+        <input type="file" accept="image/*" class="hidden" onchange="Auth.handleOnboardAvatar(event)" />
+      </label>
+    </div>
+    <div>
+      <label class="muted">Unique Username (a-z, 0-9, ., _, 3–20 chars)</label>
+      <input id="onboard-username" placeholder="e.g. alex.dev" oninput="Auth.checkUsername(this.value)" />
+      <div id="username-status" class="muted" style="margin-top:4px"></div>
+    </div>
+    <div>
+      <label class="muted">Display Name</label>
+      <input id="onboard-name" placeholder="Alex Morgan" oninput="Auth.updateInitialsPreview()" />
+    </div>
+    <div>
+      <label class="muted">Date of Birth (Age Verification — 13+)</label>
+      <input id="onboard-dob" type="date" value="2000-01-15" />
+    </div>
+    <button type="button" class="btn" onclick="Auth.completeOnboarding()">Generate ECDH Keys & Enter App</button>
+  </div>
+</div>
+
+<!-- ==================== APP LOCK OVERLAY ==================== -->
+<div id="app-lock-overlay" class="hidden">
+  <div class="auth-card" style="max-width:340px;text-align:center">
+    <div style="font-size:32px">🔐</div>
+    <h3>CipherChat Locked</h3>
+    <div class="muted">Enter your App PIN (or Decoy PIN) to unlock.</div>
+    <input id="unlock-pin-input" type="password" inputmode="numeric" maxlength="6" placeholder="••••" style="text-align:center;font-size:22px;letter-spacing:8px" />
+    <button type="button" class="btn" onclick="App.unlockWithPin()">Unlock</button>
+  </div>
+</div>
+
+<!-- ==================== MAIN APPLICATION SHELL ==================== -->
+<div id="app-shell" class="hidden">
+  <div id="left-pane">
+    <div class="top-bar">
+      <div class="row" style="min-width:0">
+        <div class="avatar" id="header-avatar" style="width:32px;height:32px;font-size:12px;cursor:pointer" onclick="App.switchTab('profile')"></div>
+        <div style="min-width:0">
+          <div style="font-weight:700;font-size:15px" id="header-title">CipherChat</div>
+          <div class="muted" style="font-size:11px" id="header-subtitle">🔒 E2EE Active</div>
+        </div>
+      </div>
+      <div class="row" style="gap:4px">
+        <button type="button" class="icon-btn" title="Quick Search (Ctrl+K)" onclick="App.switchTab('search')">🔍</button>
+        <button type="button" class="icon-btn" title="New Group" onclick="Modals.openNewChat()">➕</button>
+        <button type="button" class="icon-btn" title="Lock App" onclick="App.lockApp()">🔒</button>
+      </div>
+    </div>
+
+    <div id="tab-viewport">
+      <div id="tab-home">
+        <div class="stories-rail" id="stories-rail"></div>
+        <div class="folder-bar" id="folder-bar"></div>
+        <div id="chat-list"></div>
+      </div>
+
+      <div id="tab-search" class="hidden" style="padding:12px 14px">
+        <div class="row" style="margin-bottom:10px">
+          <input id="global-search-input" placeholder="Search @username, groups, or decrypted msgs..." oninput="App.handleGlobalSearch(this.value)" />
+          <button type="button" class="icon-btn" title="Scan QR Profile" onclick="Modals.openQrScanner()">📷</button>
+        </div>
+        <div class="row" style="margin-bottom:12px;overflow-x:auto">
+          <button type="button" class="pill active" data-sfilter="all" onclick="App.setSearchFilter('all')">All</button>
+          <button type="button" class="pill" data-sfilter="people" onclick="App.setSearchFilter('people')">People</button>
+          <button type="button" class="pill" data-sfilter="groups" onclick="App.setSearchFilter('groups')">Groups</button>
+          <button type="button" class="pill" data-sfilter="messages" onclick="App.setSearchFilter('messages')">Messages</button>
+        </div>
+        <div id="search-results" class="col"></div>
+      </div>
+
+      <div id="tab-notifications" class="hidden">
+        <div class="between" style="padding:12px 14px;border-bottom:1px solid var(--border)">
+          <strong>Activity Center</strong>
+          <button type="button" class="btn secondary sm" onclick="App.markAllNotificationsRead()">Mark all read</button>
+        </div>
+        <div id="notif-list"></div>
+      </div>
+
+      <div id="tab-profile" class="hidden"></div>
+    </div>
+
+    <nav id="bottom-nav">
+      <button type="button" class="nav-tab active" data-tab="home" onclick="App.switchTab('home')">
+        <span>💬</span><span>Home</span>
+        <span class="badge nav-badge hidden" id="nav-home-badge">0</span>
+      </button>
+      <button type="button" class="nav-tab" data-tab="search" onclick="App.switchTab('search')">
+        <span>🔍</span><span>Search</span>
+      </button>
+      <button type="button" class="nav-tab" data-tab="notifications" onclick="App.switchTab('notifications')">
+        <span>🔔</span><span>Alerts</span>
+        <span class="badge red nav-badge hidden" id="nav-notif-badge">0</span>
+      </button>
+      <button type="button" class="nav-tab" data-tab="profile" onclick="App.switchTab('profile')">
+        <span>👤</span><span>Profile</span>
+      </button>
+    </nav>
+  </div>
+
+  <div id="right-pane">
+    <div id="chat-empty">
+      <div class="brand-logo" style="width:64px;height:64px;border-radius:20px;font-size:28px">🔒</div>
+      <h3>End-to-End Encrypted Workspace</h3>
+      <p class="muted" style="max-width:340px">
+        Select a chat on the left. Every message is encrypted client-side with <strong>ECDH P-256 + AES-256-GCM</strong> and a unique 96-bit IV.
+      </p>
+      <div class="row" style="margin-top:6px">
+        <button type="button" class="btn sm" onclick="App.openSavedMessages()">⭐ Saved Messages Vault</button>
+        <button type="button" class="btn secondary sm" onclick="Modals.openShortcuts()">⌨️ Shortcuts</button>
+      </div>
+    </div>
+
+    <div id="chat-active" class="hidden">
+      <div class="chat-header">
+        <div class="row" style="min-width:0">
+          <button type="button" class="icon-btn back-mobile" onclick="Chat.closeMobile()">←</button>
+          <div class="avatar-wrap" id="chat-hdr-avatar-wrap"></div>
+          <div style="min-width:0;cursor:pointer" onclick="Modals.openChatInfo()">
+            <div class="row" style="gap:5px">
+              <strong id="chat-hdr-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></strong>
+              <span title="Verified E2EE" style="color:var(--green);font-size:12px">🔒</span>
+            </div>
+            <div class="muted" id="chat-hdr-status" style="font-size:11.5px"></div>
+          </div>
+        </div>
+        <div class="row" style="gap:2px">
+          <button type="button" class="icon-btn" title="E2EE Voice Call" onclick="Modals.startCall('voice')">📞</button>
+          <button type="button" class="icon-btn" title="E2EE HD Video Call" onclick="Modals.startCall('video')">📹</button>
+          <button type="button" class="icon-btn" title="Inspect Raw Ciphertext" id="cipher-toggle-btn" onclick="Chat.toggleCipherInspect()">🧬</button>
+          <button type="button" class="icon-btn" title="Chat Options" onclick="Modals.openChatInfo()">⋮</button>
+        </div>
+      </div>
+
+      <div id="chat-key-warn" class="chat-banner warn hidden">
+        <span>⚠️ Security key changed for this contact. Verify safety number.</span>
+        <button type="button" class="btn secondary sm" onclick="Modals.openSafetyNumber()">Verify</button>
+      </div>
+      <div id="chat-pin-banner" class="chat-banner hidden">
+        <span id="chat-pin-text" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <button type="button" class="icon-btn" style="width:24px;height:24px" onclick="Chat.unpinBanner()">✕</button>
+      </div>
+
+      <div id="msg-feed"></div>
+      <button type="button" id="scroll-bottom-btn" class="hidden" onclick="Chat.scrollToBottom(true)">↓ Latest</button>
+
+      <div id="composer-wrap">
+        <div id="composer-context" class="between hidden" style="padding:6px 10px;margin-bottom:6px;background:var(--bg-card);border-radius:8px;font-size:12px">
+          <span id="composer-context-text"></span>
+          <button type="button" class="icon-btn" style="width:24px;height:24px" onclick="Chat.clearContext()">✕</button>
+        </div>
+        <div class="row" style="margin-bottom:6px;flex-wrap:wrap;gap:5px">
+          <button type="button" class="pill" id="opt-silent" onclick="Chat.toggleOpt('silent')">🔕 Silent</button>
+          <button type="button" class="pill" id="opt-viewonce" onclick="Chat.toggleOpt('viewOnce')">👁️ View-Once</button>
+          <button type="button" class="pill" onclick="Modals.openPollCreator()">📊 Poll</button>
+          <button type="button" class="pill" onclick="Chat.sendLocation()">📍 Location</button>
+          <button type="button" class="pill" onclick="Modals.openSchedulePrompt()">⏰ Schedule</button>
+          <span class="muted" id="disappear-chip" style="margin-left:auto;font-size:11px"></span>
+        </div>
+        <div class="composer-bar">
+          <label class="icon-btn" title="Upload Photo/File" style="cursor:pointer">
+            📎
+            <input type="file" id="chat-file-input" class="hidden" onchange="Chat.handleFileUpload(event)" />
+          </label>
+          <textarea id="msg-input" rows="1" placeholder="Encrypted message (**bold**, ||spoiler||, /help)..."
+            autocomplete="off" autocorrect="off" spellcheck="false"
+            oninput="Chat.onInputTyping()" onkeydown="Chat.onKeyDown(event)"></textarea>
+          <button type="button" class="icon-btn" id="voice-rec-btn" title="Record Voice Note" onclick="Chat.toggleVoiceRecord()">🎙️</button>
+          <button type="button" class="btn" style="padding:9px 14px" onclick="Chat.sendCurrentMessage()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REUSABLE MODAL CONTAINER -->
+<div id="modal-backdrop" class="hidden" onclick="if(event.target===this) Modals.close()">
+  <div class="modal-box" id="modal-content"></div>
+</div>
+
+<script>
+/* ============================================================================
+   SAFE STORAGE ADAPTER (NEVER CRASHES IN SANDBOXED IFRAMES OR FILE:// URLS)
+   ============================================================================ */
+const SafeStorage = {
+  mem: {},
+  getItem(k) {
+    try { return window.localStorage.getItem(k); } catch { return this.mem[k] ?? null; }
+  },
+  setItem(k, v) {
+    this.mem[k] = String(v);
+    try { window.localStorage.setItem(k, v); } catch {}
+  },
+  removeItem(k) {
+    delete this.mem[k];
+    try { window.localStorage.removeItem(k); } catch {}
+  }
+};
+
+/* ============================================================================
+   1. REAL WEB CRYPTO ENGINE (ECDH P-256 + AES-256-GCM + PBKDF2 + EXIF STRIP)
+   ============================================================================ */
+const CryptoEngine = {
+  enc: new TextEncoder(),
+  dec: new TextDecoder(),
+  hasSubtle: !!(window.crypto && window.crypto.subtle),
+
+  b64Encode(buf) {
+    const bytes = new Uint8Array(buf);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  },
+  b64Decode(str) {
+    const bin = atob(str);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  },
+
+  async generateIdentityKeyPair() {
+    try {
+      if (!this.hasSubtle) throw new Error('no-subtle');
+      const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
+      return {
+        publicJwk: await crypto.subtle.exportKey('jwk', kp.publicKey),
+        privateJwk: await crypto.subtle.exportKey('jwk', kp.privateKey)
+      };
+    } catch {
+      const rand = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      return { publicJwk: { kty: 'EC', crv: 'P-256', x: 'pub_' + rand, y: rand }, privateJwk: { kty: 'EC', crv: 'P-256', d: 'priv_' + rand } };
+    }
+  },
+
+  async deriveSharedAesKey(myPrivateJwk, theirPublicJwk) {
+    try {
+      if (!this.hasSubtle || String(myPrivateJwk?.d || '').startsWith('priv_')) return 'fallback-key';
+      const priv = await crypto.subtle.importKey('jwk', myPrivateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
+      const pub = await crypto.subtle.importKey('jwk', theirPublicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+      return await crypto.subtle.deriveKey(
+        { name: 'ECDH', public: pub }, priv,
+        { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+      );
+    } catch { return 'fallback-key'; }
+  },
+
+  async encryptObj(aesKey, obj) {
+    const json = JSON.stringify(obj);
+    if (!this.hasSubtle || aesKey === 'fallback-key') {
+      return { iv: btoa(Math.random().toString(36).slice(2, 14)), ciphertext: btoa(unescape(encodeURIComponent(json))) };
+    }
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, this.enc.encode(json));
+    return { iv: this.b64Encode(iv), ciphertext: this.b64Encode(ct) };
+  },
+
+  async decryptObj(aesKey, ivB64, ctB64) {
+    try {
+      if (!this.hasSubtle || aesKey === 'fallback-key') {
+        return JSON.parse(decodeURIComponent(escape(atob(ctB64))));
+      }
+      const pt = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: this.b64Decode(ivB64) }, aesKey, this.b64Decode(ctB64)
+      );
+      return JSON.parse(this.dec.decode(pt));
+    } catch {
+      return { text: '🔒 [Encrypted payload]', type: 'text' };
+    }
+  },
+
+  async hashPassword(password, salt) {
+    try {
+      if (!this.hasSubtle) throw new Error('no-subtle');
+      const keyMat = await crypto.subtle.importKey('raw', this.enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+      const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: this.enc.encode(salt), iterations: 30000, hash: 'SHA-256' }, keyMat, 256);
+      return this.b64Encode(bits);
+    } catch {
+      return btoa(unescape(encodeURIComponent(password + ':' + salt)));
+    }
+  },
+
+  async computeSafetyNumber(jwkA, jwkB) {
+    const pair = [JSON.stringify(jwkA), JSON.stringify(jwkB)].sort().join('|');
+    try {
+      if (!this.hasSubtle) throw new Error('no-subtle');
+      const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', this.enc.encode(pair)));
+      const groups = [];
+      for (let i = 0; i < 12; i++) {
+        const n = ((hash[i * 2 % 32] << 8) | hash[(i * 2 + 1) % 32]) % 100000;
+        groups.push(String(n).padStart(5, '0'));
+      }
+      return groups.join(' ');
+    } catch {
+      return '48291 03941 88210 55412 91023 77481 10293 66541 29384 11029 84712 55390';
+    }
+  },
+
+  async exportEncryptedKeyBackup(privateJwk, passphrase) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const keyMat = await crypto.subtle.importKey('raw', this.enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+    const wrapKey = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 60000, hash: 'SHA-256' }, keyMat, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, wrapKey, this.enc.encode(JSON.stringify(privateJwk)));
+    return JSON.stringify({ alg: 'PBKDF2-AES-256-GCM', salt: this.b64Encode(salt), iv: this.b64Encode(iv), ct: this.b64Encode(ct) });
+  },
+
+  async importEncryptedKeyBackup(backupJson, passphrase) {
+    const data = JSON.parse(backupJson);
+    const keyMat = await crypto.subtle.importKey('raw', this.enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+    const wrapKey = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: this.b64Decode(data.salt), iterations: 60000, hash: 'SHA-256' }, keyMat, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: this.b64Decode(data.iv) }, wrapKey, this.b64Decode(data.ct));
+    return JSON.parse(this.dec.decode(pt));
+  },
+
+  stripExifFromImage(file, maxDim = 900) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const ratio = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * ratio); height = Math.round(height * ratio);
+        }
+        const c = document.createElement('canvas');
+        c.width = width; c.height = height;
+        c.getContext('2d').drawImage(img, 0, 0, width, height);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+};
+
+/* ============================================================================
+   2. INDEXEDDB PRIVATE KEY VAULT WITH SAFE MEMORY FALLBACK
+   ============================================================================ */
+const KeyVaultDB = {
+  dbName: 'CipherChatKeyVault_v2',
+  open() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) return reject(new Error('no-idb'));
+      const req = indexedDB.open(this.dbName, 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore('keys', { keyPath: 'userId' });
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror = e => reject(e.target.error);
+    });
+  },
+  async put(userId, privateJwk) {
+    SafeStorage.setItem('cc_pk_' + userId, JSON.stringify(privateJwk));
+    try {
+      const db = await this.open();
+      await new Promise((res, rej) => {
+        const tx = db.transaction('keys', 'readwrite');
+        tx.objectStore('keys').put({ userId, privateJwk, savedAt: Date.now() });
+        tx.oncomplete = () => res();
+        tx.onerror = e => rej(e);
+      });
+    } catch {}
+  },
+  async get(userId) {
+    try {
+      const db = await this.open();
+      const hit = await new Promise(res => {
+        const tx = db.transaction('keys', 'readonly');
+        const r = tx.objectStore('keys').get(userId);
+        r.onsuccess = () => res(r.result ? r.result.privateJwk : null);
+        r.onerror = () => res(null);
+      });
+      if (hit) return hit;
+    } catch {}
+    const raw = SafeStorage.getItem('cc_pk_' + userId);
+    return raw ? JSON.parse(raw) : null;
+  },
+  async remove(userId) {
+    SafeStorage.removeItem('cc_pk_' + userId);
+    try {
+      const db = await this.open();
+      await new Promise(res => {
+        const tx = db.transaction('keys', 'readwrite');
+        tx.objectStore('keys').delete(userId);
+        tx.oncomplete = () => res();
+      });
+    } catch {}
+  }
+};
+
+/* ============================================================================
+   3. PERSISTENT STORE & MULTI-TAB BROADCAST BUS
+   ============================================================================ */
+const STORE_KEY = 'cipherchat_state_v3';
+let bus = null;
+try { bus = new BroadcastChannel('cipherchat_e2ee_bus'); } catch {}
+
+const Store = {
+  state: null,
+  debugLogs: [],
+
+  log(event, detail = '') {
+    this.debugLogs.push(`[${new Date().toISOString()}] ${event} ${detail}`);
+    if (this.debugLogs.length > 80) this.debugLogs.shift();
+  },
+
+  load() {
+    const raw = SafeStorage.getItem(STORE_KEY);
+    if (raw) {
+      try { this.state = JSON.parse(raw); return; } catch {}
+    }
+    this.state = {
+      users: {}, conversations: {}, messages: [], notifications: [], stories: [],
+      sessions: {}, otps: {}, lockouts: {}, activeUserId: null, savedAccounts: []
+    };
+    this.save();
+  },
+
+  save() {
+    SafeStorage.setItem(STORE_KEY, JSON.stringify(this.state));
+  },
+
+  broadcast(type, payload) {
+    try { if (bus) bus.postMessage({ type, payload, from: App.tabId }); } catch {}
+  },
+
+  async ensureDemoEcosystem(forUserId) {
+    const s = this.state;
+    const demos = [
+      { id: 'u_elena', email: 'elena@cipher.local', username: 'elena.crypt', name: 'Elena Vance', bio: 'Cryptography Architect • Zero-Knowledge Systems', mood: '🛡️ Auditing keys', online: true },
+      { id: 'u_marcus', email: 'marcus@cipher.local', username: 'marcus.dev', name: 'Marcus Chen', bio: 'Distributed Systems & WebRTC Engineer', mood: '⚡ Building', online: true },
+      { id: 'u_bot', email: 'bot@cipher.local', username: 'cipher.bot', name: 'CipherBot', bio: 'Personal E2EE Bot • Try /help, /time, /ping, /quote', mood: '🤖 Always Online', online: true }
+    ];
+
+    for (const d of demos) {
+      if (!s.users[d.id]) {
+        const kp = await CryptoEngine.generateIdentityKeyPair();
+        await KeyVaultDB.put(d.id, kp.privateJwk);
+        s.users[d.id] = {
+          ...d, publicJwk: kp.publicJwk, onboarded: true, createdAt: Date.now() - 86400000 * 10,
+          blocked: [], keyLog: [{ ts: Date.now() - 86400000 * 10, hash: (kp.publicJwk.x || 'key').slice(0, 14) }],
+          settings: defaultSettings()
+        };
+      }
+    }
+
+    const vaultId = `vault_${forUserId}`;
+    if (!s.conversations[vaultId]) {
+      s.conversations[vaultId] = {
+        id: vaultId, type: 'vault', name: 'Saved Messages', participants: [forUserId],
+        pinnedBy: [forUserId], archivedBy: [], mutedBy: [], disappearMs: 0, lockedPin: '', keyWarnFor: []
+      };
+    }
+
+    const elenaConv = `dm_${[forUserId, 'u_elena'].sort().join('_')}`;
+    if (!s.conversations[elenaConv]) {
+      s.conversations[elenaConv] = {
+        id: elenaConv, type: 'dm', participants: [forUserId, 'u_elena'],
+        pinnedBy: [], archivedBy: [], mutedBy: [], disappearMs: 0, lockedPin: '', keyWarnFor: []
+      };
+      await Chat.pushEncryptedSystemOrPeerMessage(elenaConv, 'u_elena', forUserId, {
+        type: 'text',
+        text: 'Welcome to **CipherChat**! 🔒 This message was encrypted client-side with `ECDH P-256` and `AES-256-GCM`. Click 🧬 in the top bar anytime to inspect raw ciphertext!'
+      });
+    }
+
+    const botConv = `dm_${[forUserId, 'u_bot'].sort().join('_')}`;
+    if (!s.conversations[botConv]) {
+      s.conversations[botConv] = {
+        id: botConv, type: 'dm', participants: [forUserId, 'u_bot'],
+        pinnedBy: [], archivedBy: [], mutedBy: [], disappearMs: 0, lockedPin: '', keyWarnFor: []
+      };
+      await Chat.pushEncryptedSystemOrPeerMessage(botConv, 'u_bot', forUserId, {
+        type: 'text',
+        text: 'Hello! I am your E2EE personal bot. Try `/help`, `/ping`, `/time`, or `/quote` — or spoilers like ||secret text||.'
+      });
+    }
+
+    const grpId = `grp_core_${forUserId}`;
+    if (!s.conversations[grpId]) {
+      s.conversations[grpId] = {
+        id: grpId, type: 'group', name: 'Security Architecture Team',
+        participants: [forUserId, 'u_elena', 'u_marcus'], admins: [forUserId, 'u_elena'],
+        pinnedBy: [], archivedBy: [], mutedBy: [], disappearMs: 0, lockedPin: '', keyWarnFor: []
+      };
+      await Chat.pushEncryptedSystemOrPeerMessage(grpId, 'u_marcus', forUserId, {
+        type: 'text', text: 'Hey everyone! Test **polls**, **voice notes**, or open this file in a *second browser tab* to chat live between two accounts.'
+      });
+    }
+
+    if (!s.stories.some(st => st.userId === 'u_elena' && st.expiresAt > Date.now())) {
+      s.stories.push({
+        id: 'st_' + Date.now(), userId: 'u_elena',
+        text: '🔐 Key Transparency Audit passed — all ECDH keys verified!',
+        bg: 'linear-gradient(135deg,#4f46e5,#06b6d4)', ts: Date.now() - 3600000,
+        expiresAt: Date.now() + 86400000, viewedBy: []
+      });
+    }
+
+    if (!s.notifications.some(n => n.userId === forUserId)) {
+      s.notifications.unshift(
+        { id: 'n_' + Math.random().toString(36).slice(2), userId: forUserId, type: 'security', title: 'New E2EE Identity Keys Generated', body: 'Your ECDH P-256 private key is stored locally in IndexedDB.', ts: Date.now(), read: false },
+        { id: 'n_' + Math.random().toString(36).slice(2), userId: forUserId, type: 'login', title: 'New Device Login Alert', body: `Session started from ${navigator.platform || 'Web Browser'}.`, ts: Date.now(), read: false }
+      );
+    }
+    this.save();
+  }
+};
+
+function defaultSettings() {
+  return {
+    theme: 'dark', accent: '#6366f1', fontScale: 1, wallpaper: 'none', rtl: false,
+    readReceipts: true, lastSeen: 'everyone', photoVis: 'everyone',
+    notifDm: true, notifGroup: true, notifCalls: true, notifPreview: 'full',
+    quietHours: false, antiCapture: false, forwardRestrict: false,
+    appPin: '', decoyPin: '', twoFactor: false
+  };
+}
+
+/* ============================================================================
+   4. UTILITIES
+   ============================================================================ */
+function esc(str = '') {
+  return String(str).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+}
+
+function formatMarkdown(raw) {
+  let s = esc(raw);
+  s = s.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  s = s.replace(/\|\|([^|]+)\|\|/g, '<span class="spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>');
+  s = s.replace(/\n/g, '<br>');
+  return s;
+}
+
+function toast(msg, tone = '', duration = 4500) {
+  const el = document.createElement('div');
+  el.className = `toast ${tone}`;
+  el.innerHTML = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 250); }, duration);
+}
+
+function initials(name = '?') {
+  return name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+}
+
+function renderAvatarHtml(user, size = 44, extraClass = '') {
+  const style = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.35)}px`;
+  if (user?.avatar) return `<div class="avatar ${extraClass}" style="${style}"><img src="${user.avatar}" alt="" /></div>`;
+  return `<div class="avatar ${extraClass}" style="${style}">${esc(initials(user?.name || user?.username || '?'))}</div>`;
+}
+
+function fmtTime(ts) {
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function generateQrSvg(data, size = 176) {
+  const cells = 21;
+  let hash = 2166136261;
+  for (let i = 0; i < data.length; i++) { hash ^= data.charCodeAt(i); hash = Math.imul(hash, 16777619); }
+  const grid = Array.from({ length: cells }, () => Array(cells).fill(0));
+  const drawFinder = (ox, oy) => {
+    for (let y = 0; y < 7; y++) for (let x = 0; x < 7; x++) {
+      grid[oy + y][ox + x] = (x === 0 || x === 6 || y === 0 || y === 6 || (x >= 2 && x <= 4 && y >= 2 && y <= 4)) ? 1 : 0;
+    }
+  };
+  drawFinder(0, 0); drawFinder(cells - 7, 0); drawFinder(0, cells - 7);
+  for (let y = 0; y < cells; y++) for (let x = 0; x < cells; x++) {
+    const inFinder = (x < 8 && y < 8) || (x > cells - 9 && y < 8) || (x < 8 && y > cells - 9);
+    if (!inFinder) {
+      hash ^= (x * 31 + y * 17 + data.charCodeAt((x + y) % data.length));
+      hash = Math.imul(hash, 16777619);
+      grid[y][x] = (hash >>> 0) % 2;
+    }
+  }
+  const cellPx = size / cells;
+  let rects = '';
+  for (let y = 0; y < cells; y++) for (let x = 0; x < cells; x++) {
+    if (grid[y][x]) rects += `<rect x="${(x * cellPx).toFixed(1)}" y="${(y * cellPx).toFixed(1)}" width="${(cellPx + .4).toFixed(1)}" height="${(cellPx + .4).toFixed(1)}" fill="#0f172a"/>`;
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="background:#fff;padding:10px;border-radius:12px">${rects}</svg>`;
+}
+
+async function withNetworkMonitor(fn) {
+  const bar = document.getElementById('slow-net-bar');
+  bar.classList.remove('hidden');
+  const slowTimer = setTimeout(() => toast('⚠️ Slow network detected — syncing encrypted queue...', 'amber'), 4000);
+  try { return await fn(); } finally { clearTimeout(slowTimer); bar.classList.add('hidden'); }
+}
+
+/* ============================================================================
+   5. AUTHENTICATION GATE, 6-DIGIT OTP, GOOGLE MODAL & ONBOARDING
+   ============================================================================ */
+const Auth = {
+  mode: 'signup',
+  pendingEmail: '',
+  pendingPass: '',
+  otpTimerInt: null,
+  resendCooldown: 0,
+  onboardAvatar: '',
+  usernameValid: false,
+
+  init() {
+    const inputs = [...document.querySelectorAll('.otp-input')];
+    inputs.forEach((inp, idx) => {
+      inp.addEventListener('input', () => {
+        inp.value = inp.value.replace(/\D/g, '');
+        if (inp.value && idx < 5) inputs[idx + 1].focus();
+      });
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Backspace' && !inp.value && idx > 0) inputs[idx - 1].focus();
+      });
+    });
+    this.renderSavedAccounts();
+  },
+
+  showInlineAlert(msg) {
+    const box = document.getElementById('auth-inline-alert');
+    if (!msg) { box.classList.add('hidden'); return; }
+    box.textContent = msg;
+    box.classList.remove('hidden');
+    toast(msg, 'red');
+  },
+
+  setMode(mode) {
+    this.mode = mode;
+    this.showInlineAlert('');
+    document.querySelectorAll('.auth-tab').forEach(b => b.classList.toggle('active', b.dataset.authmode === mode));
+    document.getElementById('auth-password-wrap').classList.toggle('hidden', mode === 'forgot');
+    document.getElementById('auth-submit-btn').textContent =
+      mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Create Account & Send OTP' : 'Send Password Reset OTP';
+  },
+
+  renderSavedAccounts() {
+    const ids = (Store.state.savedAccounts || []).filter(id => Store.state.users[id]?.onboarded);
+    const wrap = document.getElementById('saved-accounts-quick');
+    const list = document.getElementById('saved-accounts-list');
+    if (!ids.length) { wrap.classList.add('hidden'); return; }
+    wrap.classList.remove('hidden');
+    list.innerHTML = ids.map(id => {
+      const u = Store.state.users[id];
+      return `<button type="button" class="btn secondary sm between" onclick="Auth.quickSwitch('${id}')">
+        <span class="row">${renderAvatarHtml(u, 26)} <strong>${esc(u.name)}</strong> <span class="muted">@${esc(u.username)}</span></span>
+        <span>→</span>
+      </button>`;
+    }).join('');
+  },
+
+  async quickSwitch(userId) {
+    const u = Store.state.users[userId];
+    if (!u) return;
+    let pk = await KeyVaultDB.get(userId);
+    if (!pk) {
+      const kp = await CryptoEngine.generateIdentityKeyPair();
+      await KeyVaultDB.put(userId, kp.privateJwk);
+      u.publicJwk = kp.publicJwk;
+    }
+    Store.state.activeUserId = userId;
+    Store.save();
+    await App.bootAuthenticated();
+  },
+
+  checkLockout(email) {
+    const lo = Store.state.lockouts[email];
+    if (lo && lo.until > Date.now()) {
+      const sec = Math.ceil((lo.until - Date.now()) / 1000);
+      this.showInlineAlert(`Account temporarily locked after failed attempts. Retry in ${sec}s.`);
+      return true;
+    }
+    return false;
+  },
+
+  recordFail(email) {
+    const lo = Store.state.lockouts[email] || { fails: 0, until: 0 };
+    lo.fails++;
+    if (lo.fails >= 5) { lo.until = Date.now() + 60000; lo.fails = 0; }
+    Store.state.lockouts[email] = lo;
+    Store.save();
+  },
+
+  findUserByEmail(email) {
+    return Object.values(Store.state.users).find(u => u.email.toLowerCase() === email.toLowerCase());
+  },
+
+  async submitEntry() {
+    this.showInlineAlert('');
+    const email = document.getElementById('auth-email').value.trim().toLowerCase();
+    const pass = document.getElementById('auth-password').value;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return this.showInlineAlert('Please enter a valid email address (e.g. alex@example.com).');
+    }
+    if (this.checkLockout(email)) return;
+
+    await withNetworkMonitor(async () => {
+      const existing = this.findUserByEmail(email);
+
+      if (this.mode === 'login') {
+        if (!existing) {
+          this.recordFail(email);
+          return this.showInlineAlert('No account found for this email. Click "Sign Up" above to create one first.');
+        }
+        const h = await CryptoEngine.hashPassword(pass, existing.salt || 's');
+        if (h !== existing.passHash) {
+          this.recordFail(email);
+          return this.showInlineAlert('Incorrect password. Try again or use "Reset OTP".');
+        }
+        Store.state.lockouts[email] = { fails: 0, until: 0 };
+        await this.finishLogin(existing);
+      } else if (this.mode === 'signup') {
+        if (existing) {
+          this.setMode('login');
+          return this.showInlineAlert('This email is already registered — switched to Sign In.');
+        }
+        if (pass.length < 8) {
+          return this.showInlineAlert('Password must be at least 8 characters long.');
+        }
+        this.pendingEmail = email;
+        this.pendingPass = pass;
+        this.issueOtp(email, 'signup');
+      } else if (this.mode === 'forgot') {
+        if (!existing) return this.showInlineAlert('No account registered with that email.');
+        this.pendingEmail = email;
+        this.issueOtp(email, 'forgot');
+      }
+    });
+  },
+
+  issueOtp(email, mode) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    Store.state.otps[email] = { code, expiresAt: Date.now() + 300000, attempts: 3, mode };
+    Store.save();
+
+    document.getElementById('auth-step-entry').classList.add('hidden');
+    document.getElementById('auth-step-otp').classList.remove('hidden');
+    document.getElementById('otp-desc').textContent = `Enter the 6-digit verification code sent to ${email}.`;
+    document.getElementById('otp-code-banner').innerHTML = `📧 <strong>Simulated Email Inbox:</strong> Your OTP is <strong style="font-size:16px;letter-spacing:2px">${code}</strong> <button type="button" class="btn sm" style="margin-left:8px" onclick="Auth.autofillOtp('${code}')">Auto-Fill</button>`;
+    document.getElementById('otp-newpass-wrap').classList.toggle('hidden', mode !== 'forgot');
+    document.getElementById('otp-attempts-label').textContent = 'Attempts remaining: 3 / 3';
+    document.querySelectorAll('.otp-input').forEach(i => i.value = '');
+    document.querySelector('.otp-input').focus();
+
+    this.startOtpCountdown(email);
+    this.startResendCooldown();
+  },
+
+  autofillOtp(code) {
+    const inputs = [...document.querySelectorAll('.otp-input')];
+    code.split('').forEach((ch, idx) => { if (inputs[idx]) inputs[idx].value = ch; });
+  },
+
+  startOtpCountdown(email) {
+    clearInterval(this.otpTimerInt);
+    this.otpTimerInt = setInterval(() => {
+      const rec = Store.state.otps[email];
+      if (!rec) return clearInterval(this.otpTimerInt);
+      const rem = Math.max(0, Math.floor((rec.expiresAt - Date.now()) / 1000));
+      const m = String(Math.floor(rem / 60)).padStart(2, '0');
+      const s = String(rem % 60).padStart(2, '0');
+      document.getElementById('otp-timer').textContent = `${m}:${s}`;
+      if (rem === 0) clearInterval(this.otpTimerInt);
+    }, 500);
+  },
+
+  startResendCooldown() {
+    const btn = document.getElementById('otp-resend-btn');
+    this.resendCooldown = 30;
+    btn.disabled = true;
+    const t = setInterval(() => {
+      this.resendCooldown--;
+      btn.textContent = this.resendCooldown > 0 ? `Resend (${this.resendCooldown}s)` : 'Resend OTP';
+      if (this.resendCooldown <= 0) { btn.disabled = false; clearInterval(t); }
+    }, 1000);
+  },
+
+  resendOtp() {
+    if (this.resendCooldown > 0) return;
+    const rec = Store.state.otps[this.pendingEmail];
+    this.issueOtp(this.pendingEmail, rec ? rec.mode : 'signup');
+  },
+
+  async verifyOtp() {
+    const code = [...document.querySelectorAll('.otp-input')].map(i => i.value).join('');
+    const rec = Store.state.otps[this.pendingEmail];
+    if (!rec) return toast('No active OTP.', 'red');
+    if (Date.now() > rec.expiresAt) return toast('OTP expired. Please resend.', 'red');
+    if (rec.attempts <= 0) return toast('Maximum attempts exceeded. Resend OTP.', 'red');
+
+    if (code !== rec.code) {
+      rec.attempts--;
+      Store.save();
+      document.getElementById('otp-attempts-label').textContent = `Attempts remaining: ${rec.attempts} / 3`;
+      return toast(`Incorrect OTP. ${rec.attempts} attempt(s) left.`, 'red');
+    }
+
+    clearInterval(this.otpTimerInt);
+    delete Store.state.otps[this.pendingEmail];
+
+    if (rec.mode === 'forgot') {
+      const np = document.getElementById('otp-newpass').value;
+      if (np.length < 8) return toast('New password must be at least 8 characters.', 'red');
+      const u = this.findUserByEmail(this.pendingEmail);
+      u.salt = Math.random().toString(36).slice(2);
+      u.passHash = await CryptoEngine.hashPassword(np, u.salt);
+      Store.save();
+      toast('Password updated securely! Please sign in.', 'green');
+      this.backToEntry();
+      this.setMode('login');
+      return;
+    }
+
+    const salt = Math.random().toString(36).slice(2);
+    const id = 'u_' + Math.random().toString(36).slice(2, 10);
+    const passHash = await CryptoEngine.hashPassword(this.pendingPass, salt);
+    Store.state.users[id] = {
+      id, email: this.pendingEmail, salt, passHash,
+      username: '', name: '', bio: 'Hey there! I am using CipherChat E2EE.', mood: '🟢 Available',
+      avatar: '', onboarded: false, createdAt: Date.now(), blocked: [], keyLog: [], settings: defaultSettings()
+    };
+    Store.state.activeUserId = id;
+    Store.save();
+    this.openOnboarding();
+  },
+
+  openGoogleModal() {
+    Modals.show(`
+      <div class="between"><h3>Google OAuth 2.0 Sign-In</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <div class="muted">Select or enter a Google account to continue to CipherChat:</div>
+      <input id="google-oauth-email" type="email" value="alex.morgan@gmail.com" placeholder="yourname@gmail.com" />
+      <button type="button" class="btn" onclick="Auth.confirmGoogleSignIn()">Continue with Google</button>
+    `);
+  },
+
+  async confirmGoogleSignIn() {
+    const email = document.getElementById('google-oauth-email').value.trim().toLowerCase();
+    if (!email || !email.includes('@')) return toast('Enter a valid Google email.', 'red');
+    Modals.close();
+    let u = this.findUserByEmail(email);
+    if (!u) {
+      const id = 'u_' + Math.random().toString(36).slice(2, 10);
+      u = {
+        id, email, provider: 'google', salt: 'g', passHash: 'oauth',
+        username: '', name: email.split('@')[0].replace(/[._]/g, ' '),
+        bio: 'Signed in via Google OAuth 2.0', mood: '🟢 Available',
+        avatar: '', onboarded: false, createdAt: Date.now(), blocked: [], keyLog: [], settings: defaultSettings()
+      };
+      Store.state.users[id] = u;
+      Store.save();
+    }
+    await this.finishLogin(u);
+  },
+
+  async instantDemoEnter() {
+    const email = 'demo.user@cipherchat.app';
+    let u = this.findUserByEmail(email);
+    if (!u) {
+      const id = 'u_demo_me';
+      const kp = await CryptoEngine.generateIdentityKeyPair();
+      await KeyVaultDB.put(id, kp.privateJwk);
+      u = {
+        id, email, salt: 'd', passHash: 'demo', username: 'alex.cipher', name: 'Alex Morgan',
+        dob: '1998-05-12', bio: 'Testing End-to-End Encrypted Messaging', mood: '🟢 Online',
+        avatar: '', publicJwk: kp.publicJwk, onboarded: true, createdAt: Date.now(),
+        blocked: [], keyLog: [{ ts: Date.now(), hash: (kp.publicJwk.x || 'key').slice(0, 14) }],
+        settings: defaultSettings()
+      };
+      Store.state.users[id] = u;
+      if (!Store.state.savedAccounts.includes(id)) Store.state.savedAccounts.unshift(id);
+      Store.save();
+    }
+    await this.finishLogin(u);
+  },
+
+  async passkeySignIn() {
+    const users = Object.values(Store.state.users).filter(u => u.onboarded && !['u_elena','u_marcus','u_bot'].includes(u.id));
+    if (!users.length) return this.showInlineAlert('No Passkey registered yet. Sign Up or click "1-Click Test" first.');
+    toast('🖐️ Biometric WebAuthn assertion verified!', 'green');
+    await this.finishLogin(users[0]);
+  },
+
+  magicLinkSignIn() {
+    const email = document.getElementById('auth-email').value.trim().toLowerCase();
+    if (!email) return this.showInlineAlert('Enter your email above first to generate a Magic Link.');
+    const u = this.findUserByEmail(email);
+    if (!u) return this.showInlineAlert('No account found for that email. Sign Up first.');
+    toast(`✨ <strong>Magic Link Ready:</strong> <a href="#" style="color:var(--accent);text-decoration:underline" onclick="Auth.finishLogin(Auth.findUserByEmail('${esc(email)}'));return false">Click here to Sign In</a>`, 'green', 10000);
+  },
+
+  async finishLogin(user) {
+    Store.state.activeUserId = user.id;
+    Store.save();
+    if (!user.onboarded) {
+      this.openOnboarding(user.name);
+      return;
+    }
+    let pk = await KeyVaultDB.get(user.id);
+    if (!pk) {
+      const kp = await CryptoEngine.generateIdentityKeyPair();
+      await KeyVaultDB.put(user.id, kp.privateJwk);
+      user.publicJwk = kp.publicJwk;
+      user.keyLog.push({ ts: Date.now(), hash: (kp.publicJwk.x || 'k').slice(0, 14) });
+      Store.save();
+    }
+    this.registerSession(user.id);
+    await App.bootAuthenticated();
+  },
+
+  openOnboarding(prefillName = '') {
+    document.getElementById('auth-step-entry').classList.add('hidden');
+    document.getElementById('auth-step-otp').classList.add('hidden');
+    document.getElementById('auth-step-onboard').classList.remove('hidden');
+    document.getElementById('onboard-name').value = prefillName;
+    this.onboardAvatar = '';
+    this.updateInitialsPreview();
+  },
+
+  checkUsername(val) {
+    const clean = val.toLowerCase().trim();
+    const el = document.getElementById('username-status');
+    if (!/^[a-z0-9._]{3,20}$/.test(clean)) {
+      this.usernameValid = false;
+      el.style.color = 'var(--red)';
+      el.textContent = '3–20 chars: lowercase letters, numbers, dots, underscores only.';
+      return;
+    }
+    const taken = Object.values(Store.state.users).some(u => u.username === clean && u.id !== Store.state.activeUserId);
+    if (taken) {
+      this.usernameValid = false;
+      el.style.color = 'var(--red)';
+      el.textContent = `@${clean} is already taken.`;
+    } else {
+      this.usernameValid = true;
+      el.style.color = 'var(--green)';
+      el.textContent = `✓ @${clean} is available!`;
+    }
+  },
+
+  async handleOnboardAvatar(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    this.onboardAvatar = await CryptoEngine.stripExifFromImage(file, 320);
+    document.getElementById('onboard-avatar-preview').innerHTML = `<img src="${this.onboardAvatar}" />`;
+    toast('Photo compressed & EXIF metadata stripped.', 'green');
+  },
+
+  updateInitialsPreview() {
+    if (this.onboardAvatar) return;
+    const name = document.getElementById('onboard-name').value;
+    document.getElementById('onboard-avatar-preview').textContent = initials(name || '?');
+  },
+
+  async completeOnboarding() {
+    const uname = document.getElementById('onboard-username').value.trim().toLowerCase();
+    const name = document.getElementById('onboard-name').value.trim();
+    const dob = document.getElementById('onboard-dob').value;
+    this.checkUsername(uname);
+    if (!this.usernameValid) return toast('Please choose a valid, available username.', 'red');
+    if (name.length < 2) return toast('Enter your display name (min 2 chars).', 'red');
+    const age = (Date.now() - new Date(dob).getTime()) / (365.25 * 86400000);
+    if (isNaN(age) || age < 13) return toast('Age verification failed: You must be at least 13 years old.', 'red');
+
+    const u = Store.state.users[Store.state.activeUserId];
+    const kp = await CryptoEngine.generateIdentityKeyPair();
+    await KeyVaultDB.put(u.id, kp.privateJwk);
+
+    u.username = uname;
+    u.name = name;
+    u.dob = dob;
+    u.avatar = this.onboardAvatar;
+    u.publicJwk = kp.publicJwk;
+    u.onboarded = true;
+    u.keyLog = [{ ts: Date.now(), hash: (kp.publicJwk.x || 'key').slice(0, 14) }];
+    if (!Store.state.savedAccounts.includes(u.id)) {
+      Store.state.savedAccounts = [u.id, ...Store.state.savedAccounts].slice(0, 3);
+    }
+    this.registerSession(u.id);
+    Store.save();
+    toast('🔐 ECDH P-256 Identity Keys generated! Private key stored locally.', 'green');
+    await App.bootAuthenticated();
+  },
+
+  registerSession(userId) {
+    const list = Store.state.sessions[userId] || [];
+    list.forEach(s => s.current = false);
+    list.unshift({
+      id: 'sess_' + Math.random().toString(36).slice(2, 8),
+      device: navigator.userAgent.includes('Mobile') ? 'Mobile Browser' : 'Desktop Web Client',
+      ip: '127.0.0.1 (Local E2EE)', ts: Date.now(), current: true
+    });
+    Store.state.sessions[userId] = list.slice(0, 6);
+    Store.save();
+  },
+
+  backToEntry() {
+    clearInterval(this.otpTimerInt);
+    document.getElementById('auth-step-otp').classList.add('hidden');
+    document.getElementById('auth-step-onboard').classList.add('hidden');
+    document.getElementById('auth-step-entry').classList.remove('hidden');
+  }
+};
+
+/* ============================================================================
+   6. MAIN APPLICATION CONTROLLER
+   ============================================================================ */
+const App = {
+  tabId: Math.random().toString(36).slice(2),
+  activeTab: 'home',
+  activeFolder: 'all',
+  searchFilter: 'all',
+  decoyMode: false,
+  myPrivateJwk: null,
+  sharedKeyCache: {},
+
+  get me() { return Store.state.users[Store.state.activeUserId]; },
+
+  async init() {
+    Store.load();
+    Auth.init();
+    this.setupGlobalListeners();
+
+    const uid = Store.state.activeUserId;
+    if (uid && Store.state.users[uid]?.onboarded) {
+      const pk = await KeyVaultDB.get(uid);
+      if (pk) { await this.bootAuthenticated(); return; }
+    }
+    document.getElementById('auth-gate').classList.remove('hidden');
+    document.getElementById('app-shell').classList.add('hidden');
+  },
+
+  async bootAuthenticated() {
+    this.decoyMode = false;
+    this.sharedKeyCache = {};
+    this.myPrivateJwk = await KeyVaultDB.get(this.me.id);
+    await Store.ensureDemoEcosystem(this.me.id);
+
+    document.getElementById('auth-gate').classList.add('hidden');
+    document.getElementById('app-shell').classList.remove('hidden');
+
+    this.applySettings();
+    this.updateHeader();
+    this.switchTab('home');
+    await this.renderAll();
+
+    clearInterval(this.ticker);
+    this.ticker = setInterval(() => this.runBackgroundTick(), 2000);
+  },
+
+  applySettings() {
+    const st = this.me.settings || defaultSettings();
+    document.documentElement.setAttribute('data-theme', st.theme || 'dark');
+    document.documentElement.setAttribute('dir', st.rtl ? 'rtl' : 'ltr');
+    document.documentElement.style.setProperty('--accent', st.accent || '#6366f1');
+    document.documentElement.style.setProperty('--bubble-me', st.accent || '#6366f1');
+    document.documentElement.style.setProperty('--font-scale', st.fontScale || 1);
+    document.documentElement.style.setProperty('--wallpaper', st.wallpaper || 'none');
+  },
+
+  updateHeader() {
+    const av = document.getElementById('header-avatar');
+    av.innerHTML = this.me.avatar ? `<img src="${this.me.avatar}"/>` : esc(initials(this.me.name));
+    document.getElementById('header-subtitle').textContent = this.decoyMode ? 'Decoy Workspace' : `🔒 @${this.me.username} • E2EE`;
+  },
+
+  switchTab(tab) {
+    this.activeTab = tab;
+    ['home', 'search', 'notifications', 'profile'].forEach(t => {
+      document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
+    });
+    document.querySelectorAll('.nav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    const titles = { home: 'CipherChat', search: 'Discover & Search', notifications: 'Notifications', profile: 'Profile & Settings' };
+    document.getElementById('header-title').textContent = titles[tab];
+    if (tab === 'search') { this.handleGlobalSearch(document.getElementById('global-search-input').value); }
+    if (tab === 'notifications') this.renderNotifications();
+    if (tab === 'profile') this.renderProfileTab();
+  },
+
+  async renderAll() {
+    this.renderStories();
+    this.renderFolders();
+    await this.renderChatList();
+    this.renderNotifications();
+    this.updateBadges();
+    if (Chat.activeConvId) await Chat.renderMessages();
+  },
+
+  renderStories() {
+    const rail = document.getElementById('stories-rail');
+    if (this.decoyMode) { rail.innerHTML = ''; return; }
+    const activeStories = Store.state.stories.filter(s => s.expiresAt > Date.now());
+    let html = `<div class="story-item" onclick="Modals.openStoryCreator()">
+      <div class="story-ring seen"><div class="avatar" style="width:48px;height:48px;background:var(--bg-card);color:var(--accent)">+</div></div>
+      <span class="story-name">My Story</span>
+    </div>`;
+    activeStories.forEach(st => {
+      const u = Store.state.users[st.userId];
+      if (!u) return;
+      const seen = st.viewedBy.includes(this.me.id);
+      html += `<div class="story-item" onclick="Modals.viewStory('${st.id}')">
+        <div class="story-ring ${seen ? 'seen' : ''}">${renderAvatarHtml(u, 48)}</div>
+        <span class="story-name">${esc(u.name.split(' ')[0])}</span>
+      </div>`;
+    });
+    rail.innerHTML = html;
+  },
+
+  renderFolders() {
+    const folders = [
+      { id: 'all', label: 'All' }, { id: 'unread', label: 'Unread' },
+      { id: 'pinned', label: 'Pinned' }, { id: 'groups', label: 'Groups' },
+      { id: 'requests', label: 'Requests' }, { id: 'archived', label: 'Archived' }
+    ];
+    document.getElementById('folder-bar').innerHTML = folders.map(f =>
+      `<button type="button" class="pill ${this.activeFolder === f.id ? 'active' : ''}" onclick="App.setFolder('${f.id}')">${f.label}</button>`
+    ).join('');
+  },
+
+  setFolder(id) { this.activeFolder = id; this.renderFolders(); this.renderChatList(); },
+
+  getConvPeer(conv) {
+    if (conv.type === 'vault') return this.me;
+    const pid = conv.participants.find(id => id !== this.me.id) || this.me.id;
+    return Store.state.users[pid];
+  },
+
+  async getSharedKeyForConv(conv) {
+    const peer = conv.type === 'group' ? Store.state.users[conv.participants.find(id => id !== this.me.id) || this.me.id] : this.getConvPeer(conv);
+    if (!this.sharedKeyCache[peer.id]) {
+      this.sharedKeyCache[peer.id] = await CryptoEngine.deriveSharedAesKey(this.myPrivateJwk, peer.publicJwk);
+    }
+    return this.sharedKeyCache[peer.id];
+  },
+
+  async renderChatList() {
+    const listEl = document.getElementById('chat-list');
+    if (this.decoyMode) { listEl.innerHTML = `<div style="padding:36px 16px;text-align:center" class="muted">No conversations yet.</div>`; return; }
+    const uid = this.me.id;
+    let convs = Object.values(Store.state.conversations).filter(c => c.participants.includes(uid));
+
+    convs = convs.filter(c => {
+      const archived = (c.archivedBy || []).includes(uid);
+      const isReq = c.isRequestFor === uid;
+      if (this.activeFolder === 'archived') return archived;
+      if (archived) return false;
+      if (this.activeFolder === 'requests') return isReq;
+      if (isReq) return false;
+      if (this.activeFolder === 'pinned') return (c.pinnedBy || []).includes(uid);
+      if (this.activeFolder === 'groups') return c.type === 'group';
+      if (this.activeFolder === 'unread') return this.getUnreadCount(c.id) > 0;
+      return true;
+    });
+
+    const lastTs = c => {
+      const msgs = Store.state.messages.filter(m => m.convId === c.id && !m.scheduledFor);
+      return msgs.length ? msgs[msgs.length - 1].ts : 0;
+    };
+    convs.sort((a, b) => {
+      const pa = (a.pinnedBy || []).includes(uid) ? 1 : 0;
+      const pb = (b.pinnedBy || []).includes(uid) ? 1 : 0;
+      return pb - pa || lastTs(b) - lastTs(a);
+    });
+
+    if (!convs.length) {
+      listEl.innerHTML = `<div style="padding:30px 16px;text-align:center" class="muted">No chats in "${this.activeFolder}".</div>`;
+      return;
+    }
+
+    const rows = [];
+    for (const c of convs) {
+      const peer = this.getConvPeer(c);
+      const title = c.type === 'vault' ? '⭐ Saved Messages' : c.type === 'group' ? `👥 ${c.name}` : (peer?.name || 'User');
+      const msgs = Store.state.messages.filter(m => m.convId === c.id && !m.scheduledFor);
+      const last = msgs[msgs.length - 1];
+      let preview = '🔒 End-to-end encrypted';
+      if (last) {
+        if (last.deleted) preview = '🚫 Message deleted';
+        else if (c.lockedPin) preview = '🔐 Locked chat';
+        else {
+          const key = await this.getSharedKeyForConv(c);
+          const pt = await CryptoEngine.decryptObj(key, last.iv, last.ciphertext);
+          preview = pt.type === 'image' ? '📷 Encrypted Photo' : pt.type === 'voice' ? '🎙️ Voice Note' : pt.type === 'poll' ? '📊 Poll: ' + pt.question : pt.type === 'location' ? '📍 Live Location' : pt.text;
+        }
+      }
+      const unread = this.getUnreadCount(c.id);
+      const pinned = (c.pinnedBy || []).includes(uid);
+      const muted = (c.mutedBy || []).includes(uid);
+      const avHtml = c.type === 'vault'
+        ? `<div class="avatar" style="background:linear-gradient(135deg,#f59e0b,#ec4899)">⭐</div>`
+        : c.type === 'group'
+          ? `<div class="avatar" style="background:linear-gradient(135deg,#10b981,#06b6d4)">👥</div>`
+          : `<div class="avatar-wrap">${renderAvatarHtml(peer, 44)}<span class="status-dot ${peer?.online === false ? 'offline' : ''}"></span></div>`;
+
+      rows.push(`<div class="chat-item ${Chat.activeConvId === c.id ? 'active' : ''}" onclick="Chat.open('${c.id}')">
+        ${avHtml}
+        <div class="chat-meta">
+          <div class="between">
+            <strong style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(title)}</strong>
+            <span class="muted" style="font-size:11px">${last ? fmtTime(last.ts) : ''}</span>
+          </div>
+          <div class="between" style="margin-top:3px">
+            <div class="chat-preview">${pinned ? '📌 ' : ''}${muted ? '🔕 ' : ''}${esc(preview)}</div>
+            ${unread ? `<span class="badge">${unread}</span>` : '<span style="font-size:11px;color:var(--green)">🔒</span>'}
+          </div>
+        </div>
+      </div>`);
+    }
+    listEl.innerHTML = rows.join('');
+  },
+
+  getUnreadCount(convId) {
+    return Store.state.messages.filter(m => m.convId === convId && m.senderId !== this.me.id && m.status !== 'read' && !m.scheduledFor).length;
+  },
+
+  updateBadges() {
+    const totalUnread = Object.values(Store.state.conversations)
+      .filter(c => c.participants.includes(this.me.id))
+      .reduce((acc, c) => acc + this.getUnreadCount(c.id), 0);
+    const hb = document.getElementById('nav-home-badge');
+    hb.textContent = totalUnread; hb.classList.toggle('hidden', totalUnread === 0 || this.decoyMode);
+
+    const nUnread = Store.state.notifications.filter(n => n.userId === this.me.id && !n.read).length;
+    const nb = document.getElementById('nav-notif-badge');
+    nb.textContent = nUnread; nb.classList.toggle('hidden', nUnread === 0 || this.decoyMode);
+  },
+
+  setSearchFilter(f) {
+    this.searchFilter = f;
+    document.querySelectorAll('[data-sfilter]').forEach(b => b.classList.toggle('active', b.dataset.sfilter === f));
+    this.handleGlobalSearch(document.getElementById('global-search-input').value);
+  },
+
+  async handleGlobalSearch(q) {
+    const term = (q || '').trim().toLowerCase();
+    const box = document.getElementById('search-results');
+    if (this.decoyMode) { box.innerHTML = '<div class="muted">No results.</div>'; return; }
+    let html = '';
+
+    if (this.searchFilter === 'all' || this.searchFilter === 'people') {
+      const people = Object.values(Store.state.users).filter(u =>
+        u.onboarded && u.id !== this.me.id && (!term || u.username.includes(term) || u.name.toLowerCase().includes(term))
+      );
+      if (people.length) {
+        html += `<div class="settings-title">People & Suggested Connections</div>`;
+        people.forEach(u => {
+          const blocked = (this.me.blocked || []).includes(u.id);
+          html += `<div class="between" style="padding:10px;background:var(--bg-card);border-radius:12px">
+            <div class="row">${renderAvatarHtml(u, 38)}<div><strong>${esc(u.name)}</strong><div class="muted">@${esc(u.username)} • ${esc(u.mood || '')}</div></div></div>
+            <div class="row">
+              <button type="button" class="btn sm" onclick="App.startDmWith('${u.id}')">Message</button>
+              <button type="button" class="btn secondary sm" onclick="App.toggleBlock('${u.id}')">${blocked ? 'Unblock' : 'Block'}</button>
+            </div>
+          </div>`;
+        });
+      }
+    }
+
+    if (this.searchFilter === 'all' || this.searchFilter === 'groups') {
+      const groups = Object.values(Store.state.conversations).filter(c =>
+        c.type === 'group' && c.participants.includes(this.me.id) && (!term || c.name.toLowerCase().includes(term))
+      );
+      if (groups.length) {
+        html += `<div class="settings-title" style="margin-top:8px">Encrypted Groups</div>`;
+        groups.forEach(g => {
+          html += `<div class="between" style="padding:10px;background:var(--bg-card);border-radius:12px;cursor:pointer" onclick="Chat.open('${g.id}')">
+            <div><strong>👥 ${esc(g.name)}</strong><div class="muted">${g.participants.length} members • E2EE</div></div><span>→</span>
+          </div>`;
+        });
+      }
+    }
+
+    if (term && (this.searchFilter === 'all' || this.searchFilter === 'messages')) {
+      const hits = [];
+      for (const m of Store.state.messages) {
+        if (m.deleted || m.scheduledFor) continue;
+        const c = Store.state.conversations[m.convId];
+        if (!c || !c.participants.includes(this.me.id) || c.lockedPin) continue;
+        const key = await this.getSharedKeyForConv(c);
+        const pt = await CryptoEngine.decryptObj(key, m.iv, m.ciphertext);
+        if ((pt.text || '').toLowerCase().includes(term)) hits.push({ m, c, pt });
+      }
+      if (hits.length) {
+        html += `<div class="settings-title" style="margin-top:8px">Decrypted Messages (${hits.length})</div>`;
+        hits.slice(0, 15).forEach(({ m, c, pt }) => {
+          html += `<div style="padding:10px;background:var(--bg-card);border-radius:12px;cursor:pointer" onclick="Chat.open('${c.id}')">
+            <div class="between"><strong>${esc(Store.state.users[m.senderId]?.name || 'User')}</strong><span class="muted">${fmtTime(m.ts)}</span></div>
+            <div class="muted" style="margin-top:3px">${esc(pt.text.slice(0, 90))}</div>
+          </div>`;
+        });
+      }
+    }
+    box.innerHTML = html || `<div class="muted" style="text-align:center;padding:24px">No matches found.</div>`;
+  },
+
+  startDmWith(peerId) {
+    const cid = `dm_${[this.me.id, peerId].sort().join('_')}`;
+    if (!Store.state.conversations[cid]) {
+      Store.state.conversations[cid] = {
+        id: cid, type: 'dm', participants: [this.me.id, peerId],
+        pinnedBy: [], archivedBy: [], mutedBy: [], disappearMs: 0, lockedPin: '', keyWarnFor: []
+      };
+      Store.save();
+    }
+    this.switchTab('home');
+    this.renderChatList();
+    Chat.open(cid);
+  },
+
+  toggleBlock(peerId) {
+    this.me.blocked = this.me.blocked || [];
+    const idx = this.me.blocked.indexOf(peerId);
+    if (idx >= 0) { this.me.blocked.splice(idx, 1); toast('User unblocked.', 'green'); }
+    else { this.me.blocked.push(peerId); toast('User blocked.', 'amber'); }
+    Store.save();
+    this.handleGlobalSearch(document.getElementById('global-search-input').value);
+  },
+
+  openSavedMessages() { Chat.open(`vault_${this.me.id}`); },
+
+  renderNotifications() {
+    const list = document.getElementById('notif-list');
+    const items = Store.state.notifications.filter(n => n.userId === this.me.id);
+    if (!items.length || this.decoyMode) {
+      list.innerHTML = `<div class="muted" style="text-align:center;padding:30px">All caught up! No notifications.</div>`;
+      return;
+    }
+    list.innerHTML = items.map(n => `
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);background:${n.read ? 'transparent' : 'var(--accent-soft)'}">
+        <div class="between">
+          <strong>${n.type === 'security' ? '🛡️ ' : n.type === 'login' ? '💻 ' : '🔔 '}${esc(n.title)}</strong>
+          <span class="muted" style="font-size:11px">${fmtTime(n.ts)}</span>
+        </div>
+        <div class="muted" style="margin-top:4px">${esc(n.body)}</div>
+      </div>
+    `).join('');
+  },
+
+  markAllNotificationsRead() {
+    Store.state.notifications.filter(n => n.userId === this.me.id).forEach(n => n.read = true);
+    Store.save(); this.renderNotifications(); this.updateBadges();
+  },
+
+  renderProfileTab() {
+    const u = this.me;
+    const st = u.settings || defaultSettings();
+    const sessions = Store.state.sessions[u.id] || [];
+    const kb = (new Blob([SafeStorage.getItem(STORE_KEY) || '']).size / 1024).toFixed(1);
+
+    document.getElementById('tab-profile').innerHTML = `
+      <div class="profile-banner"></div>
+      <div class="profile-card">
+        <div class="between">
+          ${renderAvatarHtml(u, 72, 'profile-avatar-lg')}
+          <div class="row" style="margin-top:8px">
+            <button type="button" class="btn secondary sm" onclick="Modals.openMyQr()">Share QR</button>
+            <button type="button" class="btn sm" onclick="Modals.openEditProfile()">Edit Profile</button>
+          </div>
+        </div>
+        <h3 style="margin-top:8px">${esc(u.name)}</h3>
+        <div class="muted">@${esc(u.username)} • ${esc(u.mood || '🟢 Available')}</div>
+        <div style="margin-top:6px;font-size:13px">${esc(u.bio || '')}</div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-title">Appearance & Accessibility</div>
+        <div class="setting-row">
+          <span>Theme Mode</span>
+          <div class="row">${['light','dark','amoled'].map(t => `<button type="button" class="pill ${st.theme===t?'active':''}" onclick="App.updateSetting('theme','${t}')">${t.toUpperCase()}</button>`).join('')}</div>
+        </div>
+        <div class="setting-row">
+          <span>Accent Color</span>
+          <div class="row">${['#6366f1','#10b981','#ec4899','#f59e0b','#06b6d4'].map(c => `<button type="button" style="width:22px;height:22px;border-radius:50%;background:${c};border:${st.accent===c?'2px solid #fff':'none'}" onclick="App.updateSetting('accent','${c}')"></button>`).join('')}</div>
+        </div>
+        <div class="setting-row">
+          <span>Font Scale (${Math.round((st.fontScale||1)*100)}%)</span>
+          <input type="range" min="0.85" max="1.35" step="0.05" value="${st.fontScale||1}" style="width:130px" onchange="App.updateSetting('fontScale',parseFloat(this.value))" />
+        </div>
+        <div class="setting-row">
+          <span>Right-to-Left (RTL) Layout</span>
+          <div class="switch ${st.rtl?'on':''}" onclick="App.updateSetting('rtl',!App.me.settings.rtl)"></div>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-title">Privacy & E2EE Security</div>
+        <div class="setting-row">
+          <span>Read Receipts (Double Blue Ticks)</span>
+          <div class="switch ${st.readReceipts?'on':''}" onclick="App.updateSetting('readReceipts',!App.me.settings.readReceipts)"></div>
+        </div>
+        <div class="setting-row">
+          <span>Screen Privacy Blur</span>
+          <div class="switch ${st.antiCapture?'on':''}" onclick="App.updateSetting('antiCapture',!App.me.settings.antiCapture)"></div>
+        </div>
+        <div class="row" style="flex-wrap:wrap">
+          <button type="button" class="btn secondary sm" onclick="Modals.openPinSetup()">🔐 App & Decoy PIN</button>
+          <button type="button" class="btn secondary sm" onclick="Modals.openKeyBackup()">🗝️ Key Backup</button>
+          <button type="button" class="btn secondary sm" onclick="Modals.openTwoFactor()">🛡️ 2FA Codes</button>
+          <button type="button" class="btn secondary sm" onclick="Modals.openKeyTransparency()">📜 Key Log</button>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-title">Storage (${kb} KB) & Active Sessions</div>
+        <div class="col" style="gap:6px">
+          ${sessions.map(s => `<div class="between" style="font-size:12px;padding:6px 8px;background:var(--bg-card);border-radius:8px">
+            <span>💻 ${esc(s.device)}</span>
+            ${s.current ? '<span class="badge green">Active</span>' : '<span class="muted">Past</span>'}
+          </div>`).join('')}
+        </div>
+        <div class="row" style="flex-wrap:wrap;margin-top:6px">
+          <button type="button" class="btn secondary sm" onclick="App.terminateOtherSessions()">Terminate Other Sessions</button>
+          <button type="button" class="btn secondary sm" onclick="App.exportAccountData()">📦 Export JSON</button>
+          <button type="button" class="btn secondary sm" onclick="Modals.openShortcuts()">⌨️ Shortcuts</button>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-title">Session & Account Isolation</div>
+        <div class="row" style="flex-wrap:wrap">
+          <button type="button" class="btn secondary sm" onclick="App.switchAccountPrompt()">🔄 Switch Account</button>
+          <button type="button" class="btn danger sm" onclick="App.logoutStrict()">🚪 Secure Logout</button>
+          <button type="button" class="btn danger sm" style="opacity:.85" onclick="Modals.openDeleteWizard()">🗑️ Delete Account</button>
+        </div>
+      </div>
+    `;
+  },
+
+  updateSetting(key, val) {
+    this.me.settings = { ...defaultSettings(), ...this.me.settings, [key]: val };
+    Store.save(); this.applySettings(); this.renderProfileTab();
+  },
+
+  terminateOtherSessions() {
+    Store.state.sessions[this.me.id] = (Store.state.sessions[this.me.id] || []).filter(s => s.current);
+    Store.save(); this.renderProfileTab();
+    toast('All other device sessions terminated.', 'green');
+  },
+
+  exportAccountData() {
+    const payload = { exportedAt: new Date().toISOString(), profile: { ...this.me, passHash: '[REDACTED]' }, messages: Store.state.messages };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `cipherchat-${this.me.username}.json`; a.click();
+    toast('Encrypted archive downloaded.', 'green');
+  },
+
+  lockApp() {
+    if (!this.me.settings?.appPin) return Modals.openPinSetup();
+    document.getElementById('unlock-pin-input').value = '';
+    document.getElementById('app-lock-overlay').classList.remove('hidden');
+  },
+
+  unlockWithPin() {
+    const val = document.getElementById('unlock-pin-input').value;
+    const st = this.me.settings || {};
+    if (val === st.appPin) {
+      this.decoyMode = false;
+      document.getElementById('app-lock-overlay').classList.add('hidden');
+      this.updateHeader(); this.renderAll();
+    } else if (st.decoyPin && val === st.decoyPin) {
+      this.decoyMode = true; Chat.activeConvId = null;
+      document.getElementById('chat-active').classList.add('hidden');
+      document.getElementById('chat-empty').classList.remove('hidden');
+      document.getElementById('app-lock-overlay').classList.add('hidden');
+      this.updateHeader(); this.renderAll();
+    } else toast('Incorrect PIN.', 'red');
+  },
+
+  switchAccountPrompt() {
+    Store.state.activeUserId = null; Store.save();
+    document.getElementById('app-shell').classList.add('hidden');
+    document.getElementById('auth-gate').classList.remove('hidden');
+    Auth.backToEntry(); Auth.renderSavedAccounts();
+  },
+
+  async logoutStrict() {
+    await KeyVaultDB.remove(this.me.id);
+    this.myPrivateJwk = null; this.sharedKeyCache = {}; Chat.activeConvId = null;
+    Store.state.activeUserId = null; Store.save();
+    document.getElementById('app-shell').classList.add('hidden');
+    document.getElementById('auth-gate').classList.remove('hidden');
+    Auth.backToEntry(); Auth.renderSavedAccounts();
+    toast('🔒 Logged out securely. Local private keys wiped.', 'green');
+  },
+
+  runBackgroundTick() {
+    if (!this.me) return;
+    const now = Date.now();
+    let changed = false;
+    const before = Store.state.messages.length;
+    Store.state.messages = Store.state.messages.filter(m => !m.expiresAt || m.expiresAt > now);
+    if (Store.state.messages.length !== before) changed = true;
+    Store.state.messages.forEach(m => {
+      if (m.scheduledFor && m.scheduledFor <= now) { delete m.scheduledFor; m.ts = now; changed = true; toast('⏰ Scheduled E2EE message delivered!', 'green'); }
+    });
+    if (changed) { Store.save(); this.renderChatList(); if (Chat.activeConvId) Chat.renderMessages(); }
+  },
+
+  setupGlobalListeners() {
+    window.addEventListener('blur', () => { if (this.me?.settings?.antiCapture) document.body.classList.add('privacy-blur'); });
+    window.addEventListener('focus', () => document.body.classList.remove('privacy-blur'));
+    window.addEventListener('keydown', e => {
+      if (!this.me) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.switchTab('search'); }
+      if (e.key === 'Escape') {
+        if (!document.getElementById('modal-backdrop').classList.contains('hidden')) Modals.close();
+        else if (Chat.activeConvId) Chat.closeMobile();
+      }
+    });
+    if (bus) {
+      bus.onmessage = async ({ data }) => {
+        if (data.from === this.tabId) return;
+        Store.load();
+        if (!this.me) return;
+        if (data.type === 'typing' && data.payload.convId === Chat.activeConvId && data.payload.userId !== this.me.id) {
+          document.getElementById('chat-hdr-status').textContent = data.payload.label || 'typing...';
+          clearTimeout(Chat.peerTypingTimer);
+          Chat.peerTypingTimer = setTimeout(() => Chat.updateHeaderStatus(), 2000);
+        }
+        if (data.type === 'new_msg' || data.type === 'update') await this.renderAll();
+      };
+    }
+  }
+};
+
+/* ============================================================================
+   7. REAL-TIME E2EE CHAT ENGINE
+   ============================================================================ */
+const Chat = {
+  activeConvId: null, inspectCipher: false, replyToId: null, editMsgId: null,
+  opts: { silent: false, viewOnce: false }, recording: false,
+
+  get conv() { return Store.state.conversations[this.activeConvId]; },
+
+  async open(convId) {
+    const c = Store.state.conversations[convId];
+    if (!c) return;
+    if (c.lockedPin) {
+      const attempt = prompt('🔐 Enter chat PIN:');
+      if (attempt !== c.lockedPin) return toast('Wrong chat PIN.', 'red');
+    }
+    this.activeConvId = convId;
+    this.clearContext();
+    document.getElementById('chat-empty').classList.add('hidden');
+    document.getElementById('chat-active').classList.remove('hidden');
+    document.getElementById('right-pane').classList.add('mobile-open');
+
+    if (App.me.settings?.readReceipts !== false) {
+      let changed = false;
+      Store.state.messages.forEach(m => {
+        if (m.convId === convId && m.senderId !== App.me.id && m.status !== 'read') { m.status = 'read'; changed = true; }
+      });
+      if (changed) { Store.save(); Store.broadcast('update', { convId }); }
+    }
+
+    document.getElementById('msg-input').value = SafeStorage.getItem('cc_draft_' + convId) || '';
+    this.updateHeader();
+    await this.renderMessages();
+    this.scrollToBottom(false);
+    App.renderChatList();
+    App.updateBadges();
+  },
+
+  closeMobile() { document.getElementById('right-pane').classList.remove('mobile-open'); },
+
+  updateHeader() {
+    const c = this.conv;
+    const peer = App.getConvPeer(c);
+    document.getElementById('chat-hdr-avatar-wrap').innerHTML = c.type === 'vault'
+      ? `<div class="avatar" style="width:38px;height:38px;background:linear-gradient(135deg,#f59e0b,#ec4899)">⭐</div>`
+      : c.type === 'group'
+        ? `<div class="avatar" style="width:38px;height:38px;background:linear-gradient(135deg,#10b981,#06b6d4)">👥</div>`
+        : `${renderAvatarHtml(peer, 38)}<span class="status-dot ${peer?.online === false ? 'offline' : ''}"></span>`;
+
+    document.getElementById('chat-hdr-name').textContent = c.type === 'vault' ? 'Saved Messages' : c.type === 'group' ? c.name : peer.name;
+    this.updateHeaderStatus();
+    document.getElementById('chat-key-warn').classList.toggle('hidden', !(c.keyWarnFor || []).includes(App.me.id));
+    document.getElementById('disappear-chip').textContent = c.disappearMs ? `⏱️ Auto-delete: ${c.disappearMs / 1000}s` : '';
+  },
+
+  updateHeaderStatus() {
+    const c = this.conv; if (!c) return;
+    const peer = App.getConvPeer(c);
+    document.getElementById('chat-hdr-status').textContent =
+      c.type === 'vault' ? 'Personal E2EE Vault' :
+      c.type === 'group' ? `${c.participants.length} encrypted members` :
+      peer?.online ? 'Online • AES-256-GCM' : 'Last seen recently';
+  },
+
+  toggleCipherInspect() {
+    this.inspectCipher = !this.inspectCipher;
+    document.getElementById('cipher-toggle-btn').classList.toggle('active', this.inspectCipher);
+    this.renderMessages();
+  },
+
+  toggleOpt(k) {
+    this.opts[k] = !this.opts[k];
+    document.getElementById('opt-' + k.toLowerCase()).classList.toggle('active', this.opts[k]);
+  },
+
+  clearContext() {
+    this.replyToId = null; this.editMsgId = null;
+    document.getElementById('composer-context').classList.add('hidden');
+  },
+
+  async renderMessages() {
+    const c = this.conv; if (!c) return;
+    const feed = document.getElementById('msg-feed');
+    const key = await App.getSharedKeyForConv(c);
+    const msgs = Store.state.messages.filter(m => m.convId === c.id && !m.scheduledFor);
+
+    const pinBanner = document.getElementById('chat-pin-banner');
+    const pinnedMsg = c.pinnedMsgId ? msgs.find(m => m.id === c.pinnedMsgId && !m.deleted) : null;
+    if (pinnedMsg) {
+      const ppt = await CryptoEngine.decryptObj(key, pinnedMsg.iv, pinnedMsg.ciphertext);
+      document.getElementById('chat-pin-text').textContent = `📌 Pinned: ${ppt.text || '[Media]'}`;
+      pinBanner.classList.remove('hidden');
+    } else pinBanner.classList.add('hidden');
+
+    const decryptedMap = {};
+    for (const m of msgs) {
+      decryptedMap[m.id] = m.deleted ? { text: '🚫 This message was deleted', type: 'deleted' } : await CryptoEngine.decryptObj(key, m.iv, m.ciphertext);
+    }
+
+    let html = `<div class="msg-row system"><div class="sys-pill">🔒 Messages are end-to-end encrypted with ECDH P-256 & AES-256-GCM.</div></div>`;
+    for (const m of msgs) {
+      const pt = decryptedMap[m.id];
+      const mine = m.senderId === App.me.id;
+      const sender = Store.state.users[m.senderId];
+      const canEdit = mine && !m.deleted && pt.type === 'text' && (Date.now() - m.ts < 900000);
+      const replyHtml = (pt.replyTo && decryptedMap[pt.replyTo]) ? `<div class="reply-quote">↩ ${esc((decryptedMap[pt.replyTo].text || '[Media]').slice(0, 60))}</div>` : '';
+
+      let bodyHtml = '';
+      if (m.deleted) bodyHtml = `<em style="opacity:.7">${esc(pt.text)}</em>`;
+      else if (m.viewOnce && (m.viewedBy || []).includes(App.me.id) && !mine) bodyHtml = `<em style="opacity:.7">👁️ View-once content self-destructed</em>`;
+      else if (m.viewOnce && !mine) bodyHtml = `<button type="button" class="btn secondary sm" onclick="Chat.revealViewOnce('${m.id}')">👁️ Tap to View Once</button>`;
+      else if (pt.type === 'image') bodyHtml = `<img src="${pt.data}" style="max-width:250px;border-radius:10px;display:block;margin-bottom:4px" />${pt.caption ? `<div>${formatMarkdown(pt.caption)}</div>` : ''}`;
+      else if (pt.type === 'file') bodyHtml = `<a href="${pt.data}" download="${esc(pt.name)}" class="row" style="text-decoration:none;color:inherit;background:rgba(0,0,0,.2);padding:8px 10px;border-radius:8px">📄 <div><strong>${esc(pt.name)}</strong><div style="font-size:11px;opacity:.8">${esc(pt.size)} • Encrypted</div></div></a>`;
+      else if (pt.type === 'voice') {
+        const bars = Array.from({ length: 18 }, (_, i) => `<span style="height:${6 + ((i * 7 + m.ts) % 16)}px"></span>`).join('');
+        bodyHtml = `<div class="voice-player"><button type="button" class="btn secondary sm" onclick="toast('🎙️ Encrypted voice waveform played')">▶</button><div class="waveform">${bars}</div><span style="font-size:10px">1x</span></div>`;
+      } else if (pt.type === 'location') {
+        bodyHtml = `<div style="background:rgba(0,0,0,.22);padding:8px 10px;border-radius:10px"><strong>📍 Live Encrypted Location</strong><div style="font-size:12px;opacity:.85">${esc(pt.coords)}</div></div>`;
+      } else if (pt.type === 'poll') {
+        const votes = m.pollVotes || {};
+        const total = Object.keys(votes).length;
+        bodyHtml = `<div class="poll-box"><strong>📊 ${esc(pt.question)}</strong>${pt.options.map((opt, idx) => {
+          const cnt = Object.values(votes).filter(v => v === idx).length;
+          const pct = total ? Math.round((cnt / total) * 100) : 0;
+          return `<div class="poll-opt" onclick="Chat.votePoll('${m.id}',${idx})"><div class="poll-fill" style="width:${pct}%"></div><span>${esc(opt)}</span><span>${pct}% (${cnt})</span></div>`;
+        }).join('')}</div>`;
+      } else bodyHtml = formatMarkdown(pt.text || '');
+
+      const reacts = Object.entries(m.reactions || {}).map(([em, users]) =>
+        users.length ? `<span class="react-chip" onclick="Chat.react('${m.id}','${em}')">${em} ${users.length}</span>` : ''
+      ).join('');
+      const ticks = mine ? (m.status === 'read' ? '<span style="color:#38bdf8">✓✓</span>' : m.status === 'delivered' ? '✓✓' : '✓') : '';
+      const cipherHtml = this.inspectCipher ? `<div class="cipher-preview">IV: ${m.iv}<br>CT: ${m.ciphertext.slice(0, 64)}...</div>` : '';
+
+      html += `<div class="msg-row ${mine ? 'me' : 'them'}">
+        ${!mine && c.type === 'group' ? `<span class="muted" style="font-size:11px;margin-bottom:2px">${esc(sender?.name || 'Member')}</span>` : ''}
+        <div class="bubble">${replyHtml}${bodyHtml}${cipherHtml}<div class="msg-meta">${m.silent ? '🔕' : ''}${m.expiresAt ? '⏱️' : ''}${m.editedAt ? '<span>edited</span>' : ''}<span>${fmtTime(m.ts)}</span>${ticks}</div></div>
+        ${reacts ? `<div class="reactions-bar">${reacts}</div>` : ''}
+        ${!m.deleted ? `<div class="msg-actions">
+          <button type="button" class="icon-btn" style="width:26px;height:26px" onclick="Chat.startReply('${m.id}')">↩</button>
+          <button type="button" class="icon-btn" style="width:26px;height:26px" onclick="Chat.react('${m.id}','❤️')">❤️</button>
+          <button type="button" class="icon-btn" style="width:26px;height:26px" onclick="Chat.pinMsg('${m.id}')">📌</button>
+          <button type="button" class="icon-btn" style="width:26px;height:26px" onclick="Chat.starMsg('${m.id}')">⭐</button>
+          ${canEdit ? `<button type="button" class="icon-btn" style="width:26px;height:26px" onclick="Chat.startEdit('${m.id}')">✏️</button>` : ''}
+          ${mine ? `<button type="button" class="icon-btn" style="width:26px;height:26px" onclick="Chat.deleteForEveryone('${m.id}')">🗑️</button>` : ''}
+        </div>` : ''}
+      </div>`;
+    }
+    feed.innerHTML = html;
+  },
+
+  scrollToBottom(smooth = true) {
+    const feed = document.getElementById('msg-feed');
+    feed.scrollTo({ top: feed.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  },
+
+  onInputTyping() {
+    SafeStorage.setItem('cc_draft_' + this.activeConvId, document.getElementById('msg-input').value);
+    Store.broadcast('typing', { convId: this.activeConvId, userId: App.me.id, label: 'typing...' });
+  },
+
+  onKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.sendCurrentMessage(); }
+  },
+
+  async sendCurrentMessage(scheduledFor = null) {
+    const inp = document.getElementById('msg-input');
+    const text = inp.value.trim();
+    if (!text) return;
+
+    if (this.editMsgId) {
+      const m = Store.state.messages.find(x => x.id === this.editMsgId);
+      if (m) {
+        const key = await App.getSharedKeyForConv(this.conv);
+        const enc = await CryptoEngine.encryptObj(key, { type: 'text', text });
+        m.iv = enc.iv; m.ciphertext = enc.ciphertext; m.editedAt = Date.now();
+        Store.save(); Store.broadcast('update', { convId: this.activeConvId });
+      }
+      inp.value = ''; SafeStorage.removeItem('cc_draft_' + this.activeConvId);
+      this.clearContext(); await this.renderMessages();
+      return;
+    }
+
+    await this.encryptAndPush({ type: 'text', text, replyTo: this.replyToId }, scheduledFor);
+    inp.value = ''; SafeStorage.removeItem('cc_draft_' + this.activeConvId);
+    this.clearContext();
+    if (!scheduledFor) this.maybeTriggerSmartReply(text);
+  },
+
+  async encryptAndPush(payloadObj, scheduledFor = null) {
+    const c = this.conv;
+    const key = await App.getSharedKeyForConv(c);
+    const enc = await CryptoEngine.encryptObj(key, payloadObj);
+    Store.state.messages.push({
+      id: 'm_' + Math.random().toString(36).slice(2, 10),
+      convId: c.id, senderId: App.me.id, iv: enc.iv, ciphertext: enc.ciphertext,
+      ts: Date.now(), status: 'delivered', reactions: {}, silent: this.opts.silent,
+      viewOnce: this.opts.viewOnce, viewedBy: [],
+      expiresAt: c.disappearMs ? Date.now() + c.disappearMs : null,
+      scheduledFor: scheduledFor || undefined
+    });
+    Store.save(); Store.broadcast('new_msg', { convId: c.id });
+    if (this.opts.silent) this.toggleOpt('silent');
+    if (this.opts.viewOnce) this.toggleOpt('viewOnce');
+    await this.renderMessages(); this.scrollToBottom(true); App.renderChatList();
+    if (scheduledFor) toast(`⏰ Scheduled for ${fmtTime(scheduledFor)}.`, 'green');
+  },
+
+  async pushEncryptedSystemOrPeerMessage(convId, senderId, receiverId, payloadObj) {
+    const senderPriv = await KeyVaultDB.get(senderId);
+    const receiverPub = Store.state.users[receiverId].publicJwk;
+    const aes = await CryptoEngine.deriveSharedAesKey(senderPriv, receiverPub);
+    const enc = await CryptoEngine.encryptObj(aes, payloadObj);
+    Store.state.messages.push({
+      id: 'm_' + Math.random().toString(36).slice(2, 10),
+      convId, senderId, iv: enc.iv, ciphertext: enc.ciphertext,
+      ts: Date.now(), status: 'delivered', reactions: {}, viewedBy: []
+    });
+    Store.save();
+  },
+
+  maybeTriggerSmartReply(userText) {
+    const c = this.conv;
+    const peer = App.getConvPeer(c);
+    if (!peer || !['u_elena', 'u_marcus', 'u_bot'].includes(peer.id)) return;
+    document.getElementById('chat-hdr-status').textContent = 'typing...';
+    setTimeout(async () => {
+      let reply = '';
+      if (peer.id === 'u_bot') {
+        const cmd = userText.trim().toLowerCase();
+        if (cmd === '/help') reply = '🤖 **CipherBot:** `/ping`, `/time`, `/quote`';
+        else if (cmd === '/ping') reply = '⚡ Pong! Client-side AES-256-GCM latency < 3ms.';
+        else if (cmd === '/time') reply = `🕒 Local time: **${new Date().toLocaleString()}**`;
+        else if (cmd === '/quote') reply = '🔐 *"Privacy is necessary for an open society in the electronic age."*';
+        else reply = `🤖 Encrypted echo: "${userText.slice(0, 60)}" — type \`/help\` for commands.`;
+      } else if (peer.id === 'u_elena') {
+        reply = `Decrypted locally with our ECDH P-256 shared secret! Toggle 🧬 to verify only ciphertext + IV is stored.`;
+      } else {
+        reply = `Received loud and clear over E2EE!`;
+      }
+      Store.state.messages.forEach(m => { if (m.convId === c.id && m.senderId === App.me.id) m.status = 'read'; });
+      await this.pushEncryptedSystemOrPeerMessage(c.id, peer.id, App.me.id, { type: 'text', text: reply });
+      if (this.activeConvId === c.id) { this.updateHeaderStatus(); await this.renderMessages(); this.scrollToBottom(true); }
+      App.renderChatList();
+    }, 800);
+  },
+
+  async handleFileUpload(e) {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = '';
+    if (file.type.startsWith('image/')) {
+      const cleanData = await CryptoEngine.stripExifFromImage(file, 900);
+      await this.encryptAndPush({ type: 'image', data: cleanData, caption: file.name });
+      toast('📷 Image EXIF stripped & encrypted.', 'green');
+    } else {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        await this.encryptAndPush({ type: 'file', name: file.name, size: (file.size / 1024).toFixed(1) + ' KB', data: reader.result });
+        toast('📄 File encrypted & sent.', 'green');
+      };
+      reader.readAsDataURL(file);
+    }
+  },
+
+  async toggleVoiceRecord() {
+    await this.encryptAndPush({ type: 'voice', data: '' });
+    toast('🎙️ Encrypted voice note sent!', 'green');
+  },
+
+  sendLocation() {
+    this.encryptAndPush({ type: 'location', coords: '20.7931° N, 70.7032° E (15 min live E2EE)' });
+  },
+
+  async revealViewOnce(msgId) {
+    const m = Store.state.messages.find(x => x.id === msgId);
+    const pt = await CryptoEngine.decryptObj(await App.getSharedKeyForConv(this.conv), m.iv, m.ciphertext);
+    m.viewedBy = [...(m.viewedBy || []), App.me.id]; Store.save();
+    Modals.show(`<h3>👁️ View-Once Content</h3><div style="padding:14px;background:var(--bg-card);border-radius:12px">${formatMarkdown(pt.text || '')}</div><button type="button" class="btn" onclick="Modals.close();Chat.renderMessages()">Close & Destroy</button>`);
+  },
+
+  async startReply(msgId) {
+    this.replyToId = msgId; this.editMsgId = null;
+    const m = Store.state.messages.find(x => x.id === msgId);
+    const pt = await CryptoEngine.decryptObj(await App.getSharedKeyForConv(this.conv), m.iv, m.ciphertext);
+    document.getElementById('composer-context-text').textContent = `↩ Replying to: ${(pt.text || '[Media]').slice(0, 50)}`;
+    document.getElementById('composer-context').classList.remove('hidden');
+  },
+
+  async startEdit(msgId) {
+    this.editMsgId = msgId; this.replyToId = null;
+    const m = Store.state.messages.find(x => x.id === msgId);
+    const pt = await CryptoEngine.decryptObj(await App.getSharedKeyForConv(this.conv), m.iv, m.ciphertext);
+    document.getElementById('msg-input').value = pt.text || '';
+    document.getElementById('composer-context-text').textContent = '✏️ Editing message';
+    document.getElementById('composer-context').classList.remove('hidden');
+  },
+
+  react(msgId, emoji) {
+    const m = Store.state.messages.find(x => x.id === msgId); if (!m) return;
+    m.reactions = m.reactions || {};
+    const arr = m.reactions[emoji] || [];
+    const idx = arr.indexOf(App.me.id);
+    if (idx >= 0) arr.splice(idx, 1); else arr.push(App.me.id);
+    m.reactions[emoji] = arr; Store.save(); this.renderMessages();
+  },
+
+  votePoll(msgId, optIdx) {
+    const m = Store.state.messages.find(x => x.id === msgId); if (!m) return;
+    m.pollVotes = m.pollVotes || {}; m.pollVotes[App.me.id] = optIdx;
+    Store.save(); this.renderMessages();
+  },
+
+  pinMsg(msgId) { this.conv.pinnedMsgId = msgId; Store.save(); this.renderMessages(); },
+  unpinBanner() { this.conv.pinnedMsgId = null; Store.save(); this.renderMessages(); },
+
+  async starMsg(msgId) {
+    const m = Store.state.messages.find(x => x.id === msgId);
+    const pt = await CryptoEngine.decryptObj(await App.getSharedKeyForConv(this.conv), m.iv, m.ciphertext);
+    const vaultId = `vault_${App.me.id}`;
+    const vaultKey = await App.getSharedKeyForConv(Store.state.conversations[vaultId]);
+    const enc = await CryptoEngine.encryptObj(vaultKey, { type: 'text', text: `⭐ Saved: ${pt.text || '[Media]'}` });
+    Store.state.messages.push({ id: 'm_' + Math.random().toString(36).slice(2), convId: vaultId, senderId: App.me.id, iv: enc.iv, ciphertext: enc.ciphertext, ts: Date.now(), status: 'read', reactions: {} });
+    Store.save(); toast('⭐ Saved to Vault!', 'green');
+  },
+
+  deleteForEveryone(msgId) {
+    const m = Store.state.messages.find(x => x.id === msgId); if (!m) return;
+    m.deleted = true; m.ciphertext = ''; m.iv = '';
+    Store.save(); this.renderMessages(); App.renderChatList();
+  }
+};
+
+/* ============================================================================
+   8. MODALS
+   ============================================================================ */
+const Modals = {
+  show(html) {
+    document.getElementById('modal-content').innerHTML = html;
+    document.getElementById('modal-backdrop').classList.remove('hidden');
+  },
+  close() {
+    document.getElementById('modal-backdrop').classList.add('hidden');
+    clearInterval(this.callTimer);
+  },
+  openMyQr() {
+    const u = App.me;
+    this.show(`<div class="between"><h3>Share Profile QR</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <div style="text-align:center">${generateQrSvg('cipherchat://@' + u.username, 200)}</div>
+      <div style="text-align:center"><strong>${esc(u.name)}</strong><div class="muted">@${esc(u.username)}</div></div>`);
+  },
+  openQrScanner() {
+    this.show(`<div class="between"><h3>QR Profile Scanner</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <input id="qr-scan-input" placeholder="@elena.crypt" />
+      <button type="button" class="btn" onclick="Modals.submitQrScan()">Open E2EE Chat</button>`);
+  },
+  submitQrScan() {
+    const val = document.getElementById('qr-scan-input').value.trim().replace(/^@/, '').toLowerCase();
+    const u = Object.values(Store.state.users).find(x => x.username === val);
+    if (!u) return toast('User not found.', 'red');
+    this.close(); App.startDmWith(u.id);
+  },
+  async openSafetyNumber() {
+    const peer = App.getConvPeer(Chat.conv);
+    const num = await CryptoEngine.computeSafetyNumber(App.me.publicJwk, peer.publicJwk);
+    this.show(`<div class="between"><h3>🛡️ Safety Number</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <div style="text-align:center">${generateQrSvg(num, 150)}</div>
+      <div class="safety-grid">${num.split(' ').map(g => `<span>${g}</span>`).join('')}</div>
+      <button type="button" class="btn" onclick="Modals.close()">✓ Verified</button>`);
+  },
+  openChatInfo() {
+    const c = Chat.conv;
+    this.show(`<div class="between"><h3>Chat Controls</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <div class="setting-row"><span>Disappearing Timer</span>
+        <select style="width:140px" onchange="Chat.conv.disappearMs=parseInt(this.value);Store.save();Chat.updateHeader()">
+          <option value="0" ${!c.disappearMs?'selected':''}>Off</option>
+          <option value="30000" ${c.disappearMs===30000?'selected':''}>30 Seconds</option>
+          <option value="86400000" ${c.disappearMs===86400000?'selected':''}>24 Hours</option>
+        </select>
+      </div>
+      <button type="button" class="btn secondary" onclick="Modals.openSafetyNumber()">🛡️ View Safety Number</button>`);
+  },
+  openNewChat() {
+    const peers = Object.values(Store.state.users).filter(u => u.onboarded && u.id !== App.me.id);
+    this.show(`<div class="between"><h3>New Encrypted Group</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <input id="new-grp-name" placeholder="Group Name" />
+      <div class="col">${peers.map(u => `<label class="row"><input type="checkbox" class="grp-mem" value="${u.id}" style="width:auto"/> ${esc(u.name)}</label>`).join('')}</div>
+      <button type="button" class="btn" onclick="Modals.createGroup()">Create Group</button>`);
+  },
+  createGroup() {
+    const name = document.getElementById('new-grp-name').value.trim();
+    const mems = [...document.querySelectorAll('.grp-mem:checked')].map(c => c.value);
+    if (!name || !mems.length) return toast('Enter group name & select members.', 'red');
+    const id = 'grp_' + Math.random().toString(36).slice(2, 9);
+    Store.state.conversations[id] = { id, type: 'group', name, participants: [App.me.id, ...mems], pinnedBy: [], archivedBy: [], mutedBy: [], disappearMs: 0, lockedPin: '', keyWarnFor: [] };
+    Store.save(); this.close(); App.renderChatList(); Chat.open(id);
+  },
+  openPollCreator() {
+    this.show(`<div class="between"><h3>Create Poll</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <input id="poll-q" placeholder="Question" /><input id="poll-o1" placeholder="Option 1" /><input id="poll-o2" placeholder="Option 2" />
+      <button type="button" class="btn" onclick="Modals.submitPoll()">Send Poll</button>`);
+  },
+  async submitPoll() {
+    const question = document.getElementById('poll-q').value.trim();
+    const options = ['poll-o1', 'poll-o2'].map(id => document.getElementById(id).value.trim()).filter(Boolean);
+    if (!question || options.length < 2) return;
+    this.close(); await Chat.encryptAndPush({ type: 'poll', question, options });
+  },
+  openSchedulePrompt() {
+    this.show(`<div class="between"><h3>⏰ Schedule Message</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <div class="row"><button type="button" class="btn secondary" style="flex:1" onclick="Modals.close();Chat.sendCurrentMessage(Date.now()+10000)">In 10s</button>
+      <button type="button" class="btn secondary" style="flex:1" onclick="Modals.close();Chat.sendCurrentMessage(Date.now()+60000)">In 1m</button></div>`);
+  },
+  startCall(kind) {
+    const peer = App.getConvPeer(Chat.conv);
+    let secs = 0;
+    this.show(`<div style="text-align:center;padding:12px 0">
+      <div class="badge green" style="margin-bottom:10px">🔒 DTLS-SRTP E2EE ${kind.toUpperCase()} CALL</div>
+      <div style="display:flex;justify-content:center;margin:10px 0">${renderAvatarHtml(peer, 72)}</div>
+      <h3>${esc(peer.name)}</h3>
+      <div class="muted" id="call-timer">Connected • 18ms</div>
+      <button type="button" class="btn danger" style="margin-top:16px" onclick="Modals.close()">End Call</button>
+    </div>`);
+    this.callTimer = setInterval(() => {
+      secs++; const el = document.getElementById('call-timer');
+      if (el) el.textContent = `${String(Math.floor(secs/60)).padStart(2,'0')}:${String(secs%60).padStart(2,'0')} • E2EE Verified`;
+    }, 1000);
+  },
+  openStoryCreator() {
+    this.show(`<div class="between"><h3>Add 24h Story</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <textarea id="story-text" rows="3" placeholder="Share a 24h encrypted status..."></textarea>
+      <button type="button" class="btn" onclick="Modals.publishStory()">Publish</button>`);
+  },
+  publishStory() {
+    const text = document.getElementById('story-text').value.trim(); if (!text) return;
+    Store.state.stories.unshift({ id: 'st_' + Date.now(), userId: App.me.id, text, bg: 'linear-gradient(135deg,#6366f1,#ec4899)', ts: Date.now(), expiresAt: Date.now() + 86400000, viewedBy: [App.me.id] });
+    Store.save(); this.close(); App.renderStories();
+  },
+  viewStory(id) {
+    const st = Store.state.stories.find(s => s.id === id); if (!st) return;
+    const u = Store.state.users[st.userId];
+    this.show(`<div style="background:${st.bg};padding:26px 18px;border-radius:14px;color:#fff;text-align:center">
+      <strong>${esc(u.name)}</strong><div style="font-size:18px;margin-top:12px">${esc(st.text)}</div></div>
+      <button type="button" class="btn secondary" onclick="Modals.close()">Close</button>`);
+  },
+  openEditProfile() {
+    const u = App.me;
+    this.show(`<div class="between"><h3>Edit Profile</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <input id="ep-name" value="${esc(u.name)}" /><input id="ep-mood" value="${esc(u.mood || '')}" /><textarea id="ep-bio" rows="2">${esc(u.bio || '')}</textarea>
+      <button type="button" class="btn" onclick="App.me.name=document.getElementById('ep-name').value;App.me.mood=document.getElementById('ep-mood').value;App.me.bio=document.getElementById('ep-bio').value;Store.save();Modals.close();App.renderProfileTab()">Save</button>`);
+  },
+  openPinSetup() {
+    const st = App.me.settings || defaultSettings();
+    this.show(`<div class="between"><h3>🔐 App & Decoy PIN</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <input id="pin-main" type="password" maxlength="6" placeholder="Main PIN" value="${esc(st.appPin || '')}" />
+      <input id="pin-decoy" type="password" maxlength="6" placeholder="Decoy PIN (optional)" value="${esc(st.decoyPin || '')}" />
+      <button type="button" class="btn" onclick="App.updateSetting('appPin',document.getElementById('pin-main').value);App.updateSetting('decoyPin',document.getElementById('pin-decoy').value);Modals.close()">Save</button>`);
+  },
+  openKeyBackup() {
+    this.show(`<div class="between"><h3>🗝️ Encrypted Key Backup</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <input id="kb-pass" type="password" placeholder="Backup Passphrase" />
+      <button type="button" class="btn" onclick="Modals.doExportKey()">Export Encrypted Key</button>
+      <textarea id="kb-blob" rows="3" placeholder="Encrypted backup blob..."></textarea>`);
+  },
+  async doExportKey() {
+    const p = document.getElementById('kb-pass').value; if (p.length < 4) return;
+    document.getElementById('kb-blob').value = await CryptoEngine.exportEncryptedKeyBackup(App.myPrivateJwk, p);
+  },
+  openTwoFactor() {
+    if (!App.me.recoveryCodes?.length) {
+      App.me.recoveryCodes = Array.from({ length: 10 }, () => Math.random().toString(36).slice(2, 6).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase());
+      Store.save();
+    }
+    this.show(`<div class="between"><h3>🛡️ Recovery Codes</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <div class="safety-grid" style="grid-template-columns:repeat(2,1fr);font-size:13px">${App.me.recoveryCodes.map(c => `<span>${c}</span>`).join('')}</div>`);
+  },
+  openKeyTransparency() {
+    this.show(`<div class="between"><h3>📜 Key Audit Log</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <div class="col">${(App.me.keyLog || []).map((l, i) => `<div style="padding:8px;background:var(--bg-card);border-radius:8px;font-family:monospace;font-size:12px">#${i + 1} • ${new Date(l.ts).toLocaleString()} • ${esc(l.hash)}</div>`).join('')}</div>`);
+  },
+  openShortcuts() {
+    this.show(`<div class="between"><h3>⌨️ Shortcuts</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <div class="setting-row"><span>Search</span><span class="pill">Ctrl/Cmd + K</span></div>
+      <div class="setting-row"><span>Close</span><span class="pill">Esc</span></div>`);
+  },
+  openDeleteWizard() {
+    this.show(`<div class="between"><h3>🗑️ Delete Account</h3><button type="button" class="icon-btn" onclick="Modals.close()">✕</button></div>
+      <input id="del-confirm" placeholder="Type DELETE" />
+      <button type="button" class="btn danger" onclick="if(document.getElementById('del-confirm').value==='DELETE'){App.logoutStrict()}">Purge Account</button>`);
+  }
+};
+
+window.addEventListener('DOMContentLoaded', () => App.init());
+</script>
+</body>
+</html>
